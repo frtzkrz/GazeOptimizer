@@ -1,0 +1,15 @@
+file
+
+gaze_angles
+    polar_azimuthal
+        Attribues:
+            D20_Cornea float
+            ...
+            gaze_angle [int, int]
+            total_cost float
+            volume_term float
+        Datasets:
+            Chamber (dvh)
+            ...
+            total_dose
+        

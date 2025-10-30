@@ -1,9 +1,10 @@
 import argparse
 
-from functions.optimizer import GazeOptimizer
 import pandas as pd
-from functions.helpers import *
 import matplotlib.pyplot as plt
+import time
+
+from functions.optimizer import GazeOptimizer
 
 def main():
 
@@ -12,20 +13,31 @@ def main():
 
 
 
-    patient_id = 23336
+    patient_id = '17213'
     delta_polar = 5
     max_polar_deg = 25
     weights = {'D2_Macula': 3, 'D20_OpticalDisc': 3, 'D20_Cornea': 1, 'V55_Retina':1, 'V27_CiliaryBody': 1, 'D5_Lens': 1}
 
     Optimizer = GazeOptimizer(
         patient_id = patient_id,
-        extensive_path = f'save_eval/{patient_id}.csv',
-        use_precalculated = True
+        delta_polar=delta_polar,
+        h5py_file_path=f'results/{patient_id}.h5',
         )
-    #Optimizer.optimize()
-    Optimizer.full_plot('scatter')
-    plt.show()
+
     
+    start_time = time.time()
+    metric = 'D2_Macula'
+    Optimizer.full_metric_dvh_plot()
+    #Optimizer.full_search()
+    end_time = time.time()
+
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time: {elapsed_time:.2f} seconds")
+
+
+    
+
+
 
 if __name__ == "__main__":
     main()

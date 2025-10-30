@@ -1,6 +1,9 @@
 import numpy as np
 from connect import *
 from typing import List
+import pandas as pd
+import math
+import json
 
 def set_azimuthal(self, azimuthal):
     """
@@ -68,3 +71,38 @@ def get_volume_at_dose(
 def get_patient_id(self):
     patient = get_current("Patient")
     return patient.PatientID
+
+def load_patient(patient_id):
+    patient_db = get_current("PatientDB")
+    patient = patient_db.QueryPatientInfo(Filter = {'PatientID': patient_id} )
+    print(patient)
+    patient_db.LoadPatient(PatientInfo=patient, AllowPatientUpgrade=True)
+    return patient_db
+
+def get_dose(self):
+    plan = get_current('Plan')
+    plan_dose = plan.TreatmentCourse.TotalDose.DoseValues.DoseData
+    return plan_dose.flatten()
+
+
+def get_dvh(self, roi):
+    """ Compute cumulative DVH"""
+    rel_vols = np.linspace(0,1,self.num_dvh_bins-1)
+    doses = self.get_dose_at_volume(roi, rel_vols)
+    return np.append(doses, 0.)
+
+def get_current_wrapper(self, what):
+    return get_current(what)
+
+def get_roi_mask(self, roi_name):
+    plan = get_current('Plan')
+    dgr = plan.TreatmentCourse.TotalDose.GetDoseGridRoi(RoiName = roi_name)
+    mask = dgr.RoiVolumeDistribution.VoxelIndices
+    return mask
+
+def get_roi_names(self):
+    beam_set = get_current('BeamSet')
+    sub_structure_set = beam_set.DependentSubStructureSet
+    roi_names = [r.OfRoi.Name for r in sub_structure_set.RoiStructures if r.PrimaryShape is not None]
+    roi_names = [n for n in roi_names if n not in ["External"]]
+    return roi_names

@@ -2,83 +2,108 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import itertools
 import numpy as np
+import h5py
 from scipy.interpolate import griddata
 
-def single_gaze_plot(self, ax, metric, method):
-    if metric == 'Total Cost':
-        cost = self.cost_df[('total_cost', 'cost')]
-    elif metric == 'Volume Penalty':
-        cost = self.cost_df[('dvh_points', 'dose_volume_penalty')]
-    else:
-        cost = self.cost_df[('dvh_points', metric)]
-    
-    
 
-    polar = self.cost_df[('gaze_angles', 'polar')]
-    azimuthal = self.cost_df[('gaze_angles', 'azimuthal')]
+def single_gaze_plot(self, ax, metric):
+    #Get data fr
+    with h5py.File(self.h5py_file_path, "r") as f:
+        gaze_angle_keys = f['gaze_angles'].keys()
+        angles = np.array([f['gaze_angles'][gaze_angle_key].attrs['gaze_angle'] for gaze_angle_key in gaze_angle_keys])
+        cost = np.array([f['gaze_angles'][gaze_angle_key].attrs[metric] for gaze_angle_key in gaze_angle_keys])
+
+    polar = angles[:,0]
+    azimuthal = angles[:,1]
+    theta = np.deg2rad(azimuthal)
+
+    polar_opt, azimuthal_opt, _ = self.find_optimum_for_metric('total_cost')
     polar_opt_metric, azimuthal_opt_metric, cost_opt_metric = self.find_optimum_for_metric(metric)
+    sc = ax.scatter(theta, polar, c=cost, cmap='viridis', s=60)
 
-    if method == 'contourf':
-        levels=30
-        theta = np.deg2rad(azimuthal)
-        r_lin=np.linspace(polar.min(), polar.max(), 100)
-        theta_lin = np.linspace(0, 2*np.pi, 100)
-        R_grid, Theta_grid = np.meshgrid(r_lin, theta_lin, indexing='ij')
-        points = np.column_stack((polar, theta))
-        Z_grid = griddata(points, cost, (R_grid, Theta_grid), method='cubic')
-        sc = ax.contourf(Theta_grid, R_grid, Z_grid, levels=30, cmap='viridis')
-
-    elif method == 'scatter':
-        sc = ax.scatter(np.deg2rad(azimuthal), polar, c=cost, cmap='viridis', s=60)
-
-    opt_metric = ax.scatter(np.deg2rad(azimuthal_opt_metric), polar_opt_metric, marker='*', color='red', s=150)
-    if metric in ['Total Cost', 'Volume Penalty']:
-        plt.colorbar(sc, ax=ax, fraction=0.05, label='Cost')
+    if metric != 'total_cost':
+        opt_metric = ax.scatter(np.deg2rad(azimuthal_opt_metric), polar_opt_metric, marker='*', color='gray', s=150, label='Optimum for metric')
+    opt = ax.scatter(np.deg2rad(azimuthal_opt), polar_opt, marker='D', color='red', s=100, label='Optimum for total cost')
+    if metric in ['total_cost', 'volume_term']:
+        label = 'Cost'
+    elif 'D' in metric:
+        label = 'Gy'
     else:
-        plt.colorbar(sc, ax=ax, fraction=0.05, label='cGy')
-    
+        label = '% Volume'
+        
+    plt.colorbar(sc, ax=ax, fraction=0.05, label=label)
     ax.set_title(metric)
+    return cost
 
 
-def full_plot(self, method='scatter'):
-    fig, axes = plt.subplots(2, 4, figsize=(12,8), subplot_kw={'projection': 'polar'}, layout='constrained')
-    if self.use_precalculated:
-        path = self.extensive_path
-    else: path = self.save_path
+def full_scatter_plot(self):
+    with h5py.File(self.h5py_file_path, "r") as f:
+        metrics = list(f['gaze_angles']['0_0'].attrs.keys())
+        metrics.remove('gaze_angle')
+        n_plots = len(metrics)
+        metrics.remove('total_cost')
+        metrics.remove('volume_term')
 
-    with open(path, mode="r", newline="", encoding="utf-8") as file:
-        self.cost_df = pd.read_csv(file, header = [0,1])
 
-    self.single_gaze_plot(ax=axes.flat[0], metric='Total Cost', method=method)
-    self.single_gaze_plot(ax=axes.flat[1], metric='Volume Penalty', method=method)
+    fig, axes = plt.subplots(2, int(np.ceil(n_plots/2)), figsize=(12,8), subplot_kw={'projection': 'polar'}, layout='constrained')
+    self.single_gaze_plot(ax=axes.flat[0], metric='total_cost')
+    self.single_gaze_plot(ax=axes.flat[1], metric='volume_term')
 
-    for metric, ax in zip(self.weights, axes.flat[2:]):
-        self.single_gaze_plot(ax=ax, metric=metric, method=method)
+    for metric, ax in zip(metrics, axes.flat[2:]):
+        self.single_gaze_plot(ax=ax, metric=metric)
 
     plt.suptitle(f'Patient {self.patient_id}')
-    plt.savefig(f'plots/{self.patient_id}_scatter_metrics.png', dpi=200)
+
+    # Get handles and labels from one of the axes (they are the same for all)
+    handles, labels = axes.flat[-1].get_legend_handles_labels()
+
+    # Create a single legend for the whole figure
+    fig.legend(handles, labels, loc='lower center')
+    plt.savefig(f'{self.plot_folder}/scatter_metrics.png', dpi=200)
+
+
+def dvh_metric_plot(self, metric):
+    fig = plt.figure(figsize=(10, 5))
+    ax_scatter = fig.add_subplot(1, 2, 1, projection='polar')
+    ax_lines = fig.add_subplot(1, 2, 2)
+    cost = self.single_gaze_plot(ax_scatter, 'total_cost')
+    _, roi = metric.split('_')
+    cmap = plt.cm.viridis
+    colors = cmap((cost - cost.min()) / (cost.max() - cost.min()))
+    min_idx = np.argmin(cost)
+    y = np.linspace(0, 1, self.num_dvh_bins)
+    with h5py.File(self.h5py_file_path, "r") as f:
+        gaze_angle_keys = f['gaze_angles'].keys()
+        for i, (gaze_angle_key, c) in enumerate(zip(gaze_angle_keys, colors)):
+            dvh = np.array(f['gaze_angles'][gaze_angle_key][roi][:])
+            if i != min_idx: ax_lines.plot(dvh, y, color=c, zorder=1)
+            else: 
+                ax_lines.plot(dvh, y, color='red', zorder=1000)
+
+          
+def full_metric_dvh_plot(self):
+    for metric in self.weights:
+        self.dvh_metric_plot(metric)
+        plt.savefig(f'{self.plot_folder}/dvh_{metric}.png', dpi=200)
+        print(metric)
 
 
 def find_optimum_for_metric(self, metric):
     """"
     Returns polar, azimuthal and cost with lowest value for metric given
     """
-    if metric == 'Total Cost':
-        idx_min = self.cost_df[('total_cost', 'cost')].idxmin()
-        cost = self.cost_df.loc[idx_min, ('total_cost', 'cost')]
+    with h5py.File(self.h5py_file_path, "r") as f:
+        gaze_angle_keys = f['gaze_angles'].keys()
+        angles = np.array([f['gaze_angles'][gaze_angle_key].attrs['gaze_angle'] for gaze_angle_key in gaze_angle_keys])
+        costs = np.array([f['gaze_angles'][gaze_angle_key].attrs[metric] for gaze_angle_key in gaze_angle_keys])
     
-    elif metric == 'Volume Penalty':
-        idx_min = self.cost_df[('dvh_points', 'dose_volume_penalty')].idxmin()
-        cost = self.cost_df.loc[idx_min, ('dvh_points', 'dose_volume_penalty')]
+    polar = angles[:,0]
+    azimuthal = angles[:,1]
+    idx = np.argmin(costs)
 
-    else:
-        idx_min = self.cost_df[('dvh_points', metric)].idxmin()    
-        cost = self.cost_df.loc[idx_min, ('dvh_points', metric)]
-    
-    polar = self.cost_df.loc[idx_min, ('gaze_angles', 'polar')]
-    azimuthal = self.cost_df.loc[idx_min, ('gaze_angles', 'azimuthal')]
+    return polar[idx], azimuthal[idx], costs[idx]
 
-    return polar, azimuthal, cost
+
 
 def find_optimum_cost(self):
     """

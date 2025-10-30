@@ -3,7 +3,6 @@ from functions.helpers import *
 
 def grid_search(
     self, 
-    gaze_angles: List[Tuple[float, float]]
     ) -> Tuple[Tuple[float, float], float]:
     """
     Performs grid search for defined angles
@@ -11,6 +10,7 @@ def grid_search(
 
     Returns: angles and cost of best performing gaze angle
     """
+    gaze_angles = self.define_gaze_angle_grid()
     l = len(gaze_angles)
     for i, gaze_angle in enumerate(gaze_angles):
         if gaze_angle not in self.cache:

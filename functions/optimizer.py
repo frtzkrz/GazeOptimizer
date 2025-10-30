@@ -13,6 +13,8 @@ from functions.helpers import *
 from functions.grid_search import *
 from functions.data_storage import *
 from functions.plotting import *
+from functions.save_dose_distributions import *
+from functions.full_search import *
 
 class GazeOptimizer:
     def __init__(
@@ -24,35 +26,35 @@ class GazeOptimizer:
         max_polar_deg=25,
         save_path=None,
         prescribed_dose=60,
-        extensive_path=None,
-        optimal_path=None,
         clinical_path=None,
         use_precalculated=False,
+        h5py_file_path = None,
+        num_dvh_bins = 100,
         plot_path='../plots/'):
         
         self.columns = [('gaze_angles', 'polar'), ('gaze_angles', 'azimuthal')] + [('dvh_points', k) for k in weights.keys()] + [('dvh_points', 'dose_volume_penalty'), ('total_cost', 'cost')]
-        self.cost_df = pd.DataFrame(columns=pd.MultiIndex.from_tuples(self.columns))
         self.patient_id = patient_id
         self.maxfev = maxfev
         self.delta_polar = delta_polar
-        self.optimal_path = optimal_path
         self.clinical_path = clinical_path
-        if save_path: self.save_path = save_path
-        else: self.save_path = f"results/{self.patient_id}_eval_history.csv"
         self.prescribed_dose = prescribed_dose
         self.weights = weights
-        self.extensive_path = extensive_path
         self.max_polar_deg = max_polar_deg
         self.bounds = [(0,max_polar_deg), (0, 360)]
         self.use_precalculated = use_precalculated
+        self.num_dvh_bins = num_dvh_bins
+        self.cache={}
+        self.plot_folder=f'plots/{self.patient_id}'
 
-        if f'P{self.patient_id}' != self.get_patient_id():
+        if save_path: self.save_path = save_path
+        else: self.save_path = f"results/{self.patient_id}_eval_history.csv"
+        
+        if h5py_file_path: self.h5py_file_path = h5py_file_path 
+        else: self.h5py_file_path = f'results/{self.patient_id}.h5'
+
+        if self.patient_id != self.get_patient_id():
             raise Exception(f'Check Patient ID: Raysearch: {self.get_patient_id()}, while here {self.patient_id}')
 
-        if self.extensive_path:
-            self.fill_cache_from_csv()
-            self.cost_df = pd.concat([self.cost_df, pd.read_csv(self.extensive_path, header = [0,1])])
-        else: self.cache = {}
     
 
     def minimizer(self, initial_guess):
@@ -68,17 +70,28 @@ class GazeOptimizer:
         
         returns: (polar_optimal, azimuthal_optimal)
         """
-        gaze_angles = define_gaze_angle_grid(
-            delta_polar=self.delta_polar,
-            max_polar_deg=self.max_polar_deg
-        )
 
-        initial_guess, _ = self.grid_search(gaze_angles)
-        print('init guess')
-        print(initial_guess)
+        gaze_angles = self.define_gaze_angle_grid()
+        roi_names = self.get_roi_names()
+
+        with h5py.File(self.h5py_file_path, 'a') as f:
+
+            #Store all roi masks for total dose if not yet saved
+            if 'roi_masks' not in f.keys():
+                mask_group = f.create_group('roi_masks')
+                for roi in roi_names:
+                    mask = self.get_roi_mask(roi_name=roi)
+                    mask_group.create_dataset(roi, data=mask)
+
+            #store patient id
+            if 'patient_id' not in f.keys():
+                f.attrs['patient_id'] = self.patient_id
+        
+        initial_guess, _ = self.grid_search()
+
+        print(f'Initial Guess: {initial_guess}')
         res = self.minimizer(initial_guess)
         optimal_angles = res.x
-        self.cost_df.to_csv(f'save_eval/{self.patient_id}.csv')
         return optimal_angles
         
 
@@ -106,7 +119,7 @@ class GazeOptimizer:
     def get_volume_at_dose(self, roi_name, dose):
         raise NotImplementedError
     
-    def grid_search(self, all_angles):
+    def grid_search(self):
         raise NotImplementedError
     
     def get_metrics(self):
@@ -121,10 +134,10 @@ class GazeOptimizer:
     def get_row_by_gaze_angle(self, gaze_angle):
         raise NotImplementedError
 
-    def single_gaze_plot(self, ax, metric, method):
+    def single_gaze_plot(self, ax, metric):
         raise NotImplementedError
 
-    def full_plot(self, method):
+    def full_scatter_plot(self):
         raise NotImplementedError
 
     def find_optimum_for_metric(self, metric):
@@ -142,7 +155,51 @@ class GazeOptimizer:
     def get_patient_id(self):
         raise NotImplementedError
     
+    def get_dose(self):
+        raise NotImplementedError
+    
+    def get_dvh(self, save_file_path):
+        raise NotImplementedError
 
+    def save_dose_distributions(self):
+        raise NotImplementedError
+    
+    def get_current_wrapper(self, what):
+        raise NotImplementedError
+
+    def get_roi_mask(self, roi_name):
+        raise NotImplementedError
+
+    def get_roi_names(self):
+        raise NotImplementedError
+    
+    def fill_cache_from_h5py(self):
+        raise NotImplementedError
+    
+    def define_gaze_angle_grid(self):
+        raise NotImplementedError
+
+    def full_search(self):
+        raise NotImplementedError
+    
+    def dvh_metric_plot(self, metric):
+        raise NotImplementedError
+
+    def full_metric_dvh_plot(self):
+        raise NotImplementedError
+    
+
+GazeOptimizer.full_metric_dvh_plot = full_metric_dvh_plot
+GazeOptimizer.dvh_metric_plot = dvh_metric_plot
+GazeOptimizer.full_search = full_search
+GazeOptimizer.define_gaze_angle_grid = define_gaze_angle_grid
+GazeOptimizer.fill_cache_from_h5py = fill_cache_from_h5py
+GazeOptimizer.get_roi_mask = get_roi_mask
+GazeOptimizer.get_roi_names = get_roi_names
+GazeOptimizer.get_current_wrapper = get_current_wrapper
+GazeOptimizer.save_dose_distributions = save_dose_distributions
+GazeOptimizer.get_dvh = get_dvh
+GazeOptimizer.get_dose = get_dose
 GazeOptimizer.get_patient_id = get_patient_id
 GazeOptimizer.cost_volume_term = cost_volume_term
 GazeOptimizer.get_metrics = get_metrics
@@ -158,7 +215,6 @@ GazeOptimizer.get_volume_at_dose = get_volume_at_dose
 GazeOptimizer.fill_cache_from_csv = fill_cache_from_csv
 GazeOptimizer.get_row_by_gaze_angle = get_row_by_gaze_angle
 GazeOptimizer.single_gaze_plot = single_gaze_plot
-GazeOptimizer.full_plot = full_plot
 GazeOptimizer.find_optimum_for_metric = find_optimum_for_metric
 GazeOptimizer.find_optimum_cost = find_optimum_cost
 GazeOptimizer.scatter_only_optima = scatter_only_optima

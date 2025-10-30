@@ -2,14 +2,15 @@
 import numpy as np
 
 def define_gaze_angle_grid(
-        delta_polar: int = 5, 
-        max_polar_deg: int = 25,
+        self
     ):
 
     """
     Creates list of dict of gaze angles spreading the plane
     delta_polar: determines the spacing between points
     """
+    delta_polar = self.delta_polar
+    max_polar_deg = self.max_polar_deg
     angles = [(0, 0)]
     polars = np.linspace(0, max_polar_deg, int(np.ceil(max_polar_deg/delta_polar)))
     for p in polars:
