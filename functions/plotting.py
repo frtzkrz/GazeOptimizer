@@ -63,11 +63,11 @@ def full_scatter_plot(self):
 
 
 def dvh_metric_plot(self, metric):
-    fig = plt.figure(figsize=(10, 5))
+    fig = plt.figure(figsize=(10, 5), constrained_layout=True)
     ax_scatter = fig.add_subplot(1, 2, 1, projection='polar')
     ax_lines = fig.add_subplot(1, 2, 2)
     cost = self.single_gaze_plot(ax_scatter, 'total_cost')
-    _, roi = metric.split('_')
+    x, roi = metric.split('_')
     cmap = plt.cm.viridis
     colors = cmap((cost - cost.min()) / (cost.max() - cost.min()))
     min_idx = np.argmin(cost)
@@ -79,6 +79,18 @@ def dvh_metric_plot(self, metric):
             if i != min_idx: ax_lines.plot(dvh, y, color=c, zorder=1)
             else: 
                 ax_lines.plot(dvh, y, color='red', zorder=1000)
+    what = x[0]
+    value = int(x[1:])
+    if what == 'D':
+        ax_lines.axhline(y=value/100, color='gray', linestyle='--', linewidth=1, label=metric)
+
+    elif what == 'V':
+        print(value)
+        ax_lines.axvline(x=value*100, color='gray', linestyle='--', linewidth=1, label=metric)
+    ax_lines.legend(loc='upper right')
+    ax_lines.set_title(roi)
+    ax_lines.set_xlabel('Dose (cGy)')
+    ax_lines.set_ylabel('Rel. Volume')
 
           
 def full_metric_dvh_plot(self):
