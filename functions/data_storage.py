@@ -13,8 +13,11 @@ def get_row_by_gaze_angle(self, gaze_angle):
 
 def fill_cache_from_h5py(self):
     self.cache={}
-    with h5py.File(self.h5py_file_path, 'r') as f:
-        gaze_angles = f['gaze_angles']
-        for angle_key in gaze_angles.keys():
-            gaze_angle = tuple(f['gaze_angles'][angle_key].attrs['gaze_angle'])
-            self.cache[gaze_angle] = f['gaze_angles'][angle_key].attrs['total_cost']
+    try:
+        with h5py.File(self.h5py_file_path, 'r') as f:
+            gaze_angles = f['gaze_angles']
+            for angle_key in gaze_angles.keys():
+                gaze_angle = tuple(f['gaze_angles'][angle_key].attrs['gaze_angle'])
+                self.cache[gaze_angle] = f['gaze_angles'][angle_key].attrs['total_cost']
+    except FileNotFoundError:
+        return

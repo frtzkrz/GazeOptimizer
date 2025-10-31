@@ -22,7 +22,7 @@ def single_gaze_plot(self, ax, metric):
     sc = ax.scatter(theta, polar, c=cost, cmap='viridis', s=60)
 
     if metric != 'total_cost':
-        opt_metric = ax.scatter(np.deg2rad(azimuthal_opt_metric), polar_opt_metric, marker='*', color='gray', s=150, label='Optimum for metric')
+        opt_metric = ax.scatter(np.deg2rad(azimuthal_opt_metric), polar_opt_metric, marker='*', color='red', s=200, label='Optimum for metric')
     opt = ax.scatter(np.deg2rad(azimuthal_opt), polar_opt, marker='D', color='red', s=100, label='Optimum for total cost')
     if metric in ['total_cost', 'volume_term']:
         label = 'Cost'
@@ -63,6 +63,7 @@ def full_scatter_plot(self):
 
 
 def dvh_metric_plot(self, metric):
+    contributions = self.find_contributions()
     fig = plt.figure(figsize=(10, 5), constrained_layout=True)
     ax_scatter = fig.add_subplot(1, 2, 1, projection='polar')
     ax_lines = fig.add_subplot(1, 2, 2)
@@ -71,6 +72,7 @@ def dvh_metric_plot(self, metric):
     cmap = plt.cm.viridis
     colors = cmap((cost - cost.min()) / (cost.max() - cost.min()))
     min_idx = np.argmin(cost)
+    min_cost = cost[min_idx]
     y = np.linspace(0, 1, self.num_dvh_bins)
     with h5py.File(self.h5py_file_path, "r") as f:
         gaze_angle_keys = f['gaze_angles'].keys()
@@ -81,14 +83,15 @@ def dvh_metric_plot(self, metric):
                 ax_lines.plot(dvh, y, color='red', zorder=1000)
     what = x[0]
     value = int(x[1:])
+    label = f'{metric}: {np.round(contributions[metric])}/{np.round(min_cost)}'
     if what == 'D':
-        ax_lines.axhline(y=value/100, color='gray', linestyle='--', linewidth=1, label=metric)
+        ax_lines.axhline(y=value/100, color='gray', linestyle='--', linewidth=1, label=label)
 
     elif what == 'V':
-        print(value)
-        ax_lines.axvline(x=value*100, color='gray', linestyle='--', linewidth=1, label=metric)
-    ax_lines.legend(loc='upper right')
+        ax_lines.axvline(x=value*100, color='gray', linestyle='--', linewidth=1, label=label)
+    ax_lines.legend()
     ax_lines.set_title(roi)
+    fig.suptitle(self.patient_id)
     ax_lines.set_xlabel('Dose (cGy)')
     ax_lines.set_ylabel('Rel. Volume')
 

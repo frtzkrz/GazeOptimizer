@@ -92,7 +92,8 @@ class GazeOptimizer:
         print(f'Initial Guess: {initial_guess}')
         res = self.minimizer(initial_guess)
         optimal_angles = res.x
-        return optimal_angles
+        optimal_cost = res.fun
+        return optimal_angles, optimal_cost
         
 
     def expensive_cost(self, polar, azimuthal):
@@ -188,7 +189,13 @@ class GazeOptimizer:
     def full_metric_dvh_plot(self):
         raise NotImplementedError
     
+    def find_contributions(self):
+        raise NotImplementedError
+    
 
+
+GazeOptimizer.full_scatter_plot = full_scatter_plot
+GazeOptimizer.find_contributions = find_contributions
 GazeOptimizer.full_metric_dvh_plot = full_metric_dvh_plot
 GazeOptimizer.dvh_metric_plot = dvh_metric_plot
 GazeOptimizer.full_search = full_search

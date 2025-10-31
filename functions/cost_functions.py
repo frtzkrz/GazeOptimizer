@@ -30,32 +30,6 @@ def cost_volume_term(self) -> float:
         cost += self.weights[w]*np.sum([self.get_volume_at_dose(roi_name=where, dose_values=[dose])*100 for dose in doses])/np.size(doses)     
     return cost
 
-"""
-def expensive_cost(self, gaze_angle: Tuple[float, float]):
-
-    #Cost Function that actually calculates the cost. Only to be used by cached_cost
-    #x = [polar, azimuthal]
-    #Saves full evaluation in eval_df but returns only the cost.
-
-    self.set_gaze_angles(gaze_angle=gaze_angle)
-    self.calculate_dose()
-    metrics = self.get_metrics()
-    volume_term = self.cost_volume_term()
-    weights_arr = np.array([float(i) for i in self.weights.values()])
-    metrics_arr = np.array([float(i) for i in metrics.values()])
-    total_cost = weights_arr@metrics_arr + volume_term
-
-    #Add results to self.cost_df
-    new_row = {('dvh_points', metric): metrics[metric] for metric in metrics}
-    new_row[('gaze_angles', 'polar')] = gaze_angle[0]
-    new_row[('gaze_angles', 'azimuthal')] = gaze_angle[1]
-    new_row[('dvh_points', 'dose_volume_penalty')] = volume_term
-    new_row[('total_cost', 'cost')] =  total_cost
-    new_row_df = pd.DataFrame(new_row, index=[0])
-    self.cost_df = pd.concat([self.cost_df, new_row_df])
-    self.cost_df.to_csv(self.save_path)
-    
-    return total_cost"""
 
 def expensive_cost(self, gaze_angle: Tuple[float, float]):
     """
@@ -114,7 +88,6 @@ def cost(self, gaze_angle: Tuple[float, float]):
     """
     
     gaze_angle = np.round(gaze_angle, 1)
-    print(f'Trying {gaze_angle}')
     key = tuple(gaze_angle)
 
     if key in self.cache:
@@ -127,3 +100,16 @@ def cost(self, gaze_angle: Tuple[float, float]):
         self.cache[key] = total_cost
 
         return total_cost
+
+def find_contributions(self):
+    with h5py.File(self.h5py_file_path, "r") as f:
+        gaze_angle_keys = f['gaze_angles'].keys()
+        angles = np.array([f['gaze_angles'][gaze_angle_key].attrs['gaze_angle'] for gaze_angle_key in gaze_angle_keys])
+        costs = np.array([f['gaze_angles'][gaze_angle_key].attrs['total_cost'] for gaze_angle_key in gaze_angle_keys])
+        min_cost_idx = np.argmin(costs)
+        min_angles = angles[min_cost_idx]
+        min_angle_key = f'{min_angles[0]}_{min_angles[1]}'
+        metrics = {weight: f['gaze_angles'][min_angle_key].attrs[weight] for weight in self.weights}
+        contributions = {metric: self.weights[metric]*metrics[metric] for metric in metrics}
+        contributions['volume_term'] = costs[min_cost_idx] - np.sum([float(contributions[contribution]) for contribution in contributions])
+        return contributions
