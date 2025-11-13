@@ -1,6 +1,7 @@
 import numpy as np
 import h5py
 import pandas as pd
+import ast
 from patient_functions.plotting import *
 from patient_functions.filter_dvh import *
 from patient_functions.dvh import *
@@ -8,59 +9,90 @@ from patient_functions.cost import *
 
 import time
 
+class RoiDVH:
+    def __init__(
+        self,
+        patient,
+        roi_name,
+        dose
+        ):
+        self.patient_id = patient.patient_id
+        self.roi_name = roi_name
+        self.dose, self.volume = cumulative_dvh(
+            dose=dose[patient.roi_masks[self.roi_name]], 
+            frac=patient.roi_relative_values[self.roi_name], 
+            voxel_vol = patient.voxel_vol, 
+            bins=patient.num_dvh_bins)
+
+    def plot(self, ax):
+        ax.plot(self.dose, self.volume)
+    
+
+class GazeAngleDVHs:
+    def __init__(
+        self,
+        patient,
+        angle_key,
+        dose,
+    ):
+        self.patient_id = patient.patient_id
+        self.angle_key = angle_key
+        self.roi_dvhs = {}
+        for roi_name in patient.roi_names:
+            self.roi_dvhs[roi_name] = RoiDVH(patient, roi_name, dose)
+            
+
+        
+
 class Patient:
     def __init__(
-            self, 
-            patient_id, 
-            h5py_file_path, 
-            num_dvh_bins = 100, 
-            weights={'D2_Macula': 3, 'D20_OpticalDisc': 3, 'D20_Cornea': 1, 'V55_Retina':1, 'V27_CiliaryBody': 1, 'D5_Lens': 1},
-            ):
+        self, 
+        patient_id, 
+        h5py_file_path, 
+        num_dvh_bins=200,
+        weights={'D2_Macula': 3, 'D20_OpticalDisc': 3, 'D20_Cornea': 1, 'V55_Retina':1, 'V27_CiliaryBody': 1, 'D5_Lens': 1},
+        ):
         print(f'Initializing Patient {patient_id}...', end='\r')
         self.patient_id = patient_id
         self.h5py_file_path = h5py_file_path   
         self.weights = weights
+        self.num_dvh_bins = num_dvh_bins
 
         #extract gaze angles, metrics, costs, and dvh data from h5py file
         with h5py.File(self.h5py_file_path, "r") as h5_file:
-            self.gaze_angle_keys = list(h5_file['gaze_angles'].keys())
-            self.gaze_angle_dict = {gaze_angle_key: h5_file['gaze_angles'][gaze_angle_key].attrs['gaze_angle'] for gaze_angle_key in self.gaze_angle_keys}     
-            self.angles=np.array([h5_file['gaze_angles'][gaze_angle_key].attrs['gaze_angle'] for gaze_angle_key in self.gaze_angle_keys])
-            self.costs = np.array([h5_file['gaze_angles'][gaze_angle_key].attrs['total_cost'] for gaze_angle_key in self.gaze_angle_keys])
-            self.costs_dict = {gaze_angle_key: h5_file['gaze_angles'][gaze_angle_key].attrs['total_cost'] for gaze_angle_key in self.gaze_angle_keys}
-            self.idx_min = np.argmin(self.costs)
-            self.rois = [k for k in list(h5_file['gaze_angles'][self.gaze_angle_keys[0]].keys()) if 'clip' not in k.lower() and 'EP' not in k and k not in ['total_dose', 'Tumor']]
-            self.optimal_angle_key = self.gaze_angle_keys[self.idx_min]
-            self.optimal_metrics = {weight: h5_file['gaze_angles'][self.optimal_angle_key].attrs[weight] for weight in self.weights}
-            self.metrics = list(h5_file['gaze_angles'][self.gaze_angle_keys[0]].attrs.keys())
-            self.metrics_dict = {gaze_angle_key: {metric: h5_file['gaze_angles'][gaze_angle_key].attrs[metric] for metric in self.metrics} for gaze_angle_key in self.gaze_angle_keys}
-            self.roi_mask_dict = {roi: h5_file['roi_masks'][roi][:] for roi in self.rois}
+            f_keys = h5_file.keys()
+            self.gaze_angle_keys = [key for key in f_keys if '(' in key]
+            self.gaze_angles = np.array([ast.literal_eval(item) for item in self.gaze_angle_keys])
+            self.roi_names = h5_file.attrs['roi_names']
+            self.roi_masks = {roi_name: h5_file[f'{roi_name}_mask'][:] for roi_name in self.roi_names}
+            self.roi_relative_values = {roi_name: h5_file[f'{roi_name}_relative_volumes'][:] for roi_name in self.roi_names}
+            self.voxel_vol = h5_file.attrs['voxel_volume']
 
-            self.dvh_dict = {}
-            for roi in self.rois:
-                self.dvh_dict[roi] = {}
-                for gaze_angle_key in self.gaze_angle_keys:
-                    dvh = np.array(h5_file['gaze_angles'][gaze_angle_key][roi][:])
-                    self.dvh_dict[roi][gaze_angle_key] = dvh
+
+            self.gaze_angle_dvhs = {}
+            for gaze_angle_key in self.gaze_angle_keys:
+                dose = h5_file[gaze_angle_key][:]
+                self.gaze_angle_dvhs[gaze_angle_key] = GazeAngleDVHs(
+                                                            patient=self,
+                                                            angle_key=gaze_angle_key,
+                                                            dose=dose
+                                                            )
+
+
 
         #extract polar and azimuthal angles and theta for plotting
-        self.polar=self.angles[:,0]
-        self.azimuthal=self.angles[:,1]
-        self.theta=np.deg2rad(self.azimuthal) #used for polar plots
-
-        #find optimal gaze angles based on total cost
-        
-        
-        self.optimal_polar=self.polar[self.idx_min]
-        self.optimal_azimuthal=self.azimuthal[self.idx_min]
-        self.optimal_theta=self.theta[self.idx_min]
-        self.optimal_cost=self.costs[self.idx_min]
-    
+        self.polar = self.gaze_angles[:,0]
+        self.azimuthal = self.gaze_angles[:,1]
+        self.theta = np.deg2rad(self.azimuthal) #used for polar plots
         self.num_dvh_bins = num_dvh_bins
 
+        
 
 
-    def find_gaze_angle_smaller_vdose(self, roi, dose, max_vol):
+
+
+
+    def find_gaze_angle_smaller_vdose(self, dose_distribution, roi, dose, max_vol):
         raise NotImplementedError
 
     def find_gaze_angle_smaller_dvol(self, roi, vol, max_dose):
@@ -107,9 +139,6 @@ class Patient:
     
     def test_gaze_combination(self, gaze_angle_keys, gaze_angle_weights, metric):
         raise NotImplementedError
-    
-    def cumulative_dvh(self, dose_array, num_points=100):
-        raise NotImplementedError
 
     def get_dose_at_volume(self, dvh, volume):
         raise NotImplementedError
@@ -146,7 +175,6 @@ Patient.get_gaze_angles_and_costs_from_keys = get_gaze_angles_and_costs_from_key
 Patient.full_filtered_metric_dvh_plot = full_filtered_metric_dvh_plot
 Patient.compare_contributions_bar = compare_contributions_bar
 Patient.test_gaze_combination = test_gaze_combination
-Patient.cumulative_dvh = cumulative_dvh
 Patient.get_dose_at_volume = get_dose_at_volume
 Patient.get_volume_at_dose = get_volume_at_dose
 Patient.get_metric = get_metric

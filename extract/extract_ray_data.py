@@ -9,7 +9,7 @@ from connect import *
 import time
 import h5py
 import numpy as np
-
+import math
 
 def define_gaze_angle_grid(
         delta_polar,
@@ -39,8 +39,10 @@ def grid_search(gaze_angles, h5py_path, patient_id):
         f.attrs['patient_id'] = patient_id
         sub_structure_set = beam_set.DependentSubStructureSet
         roi_names = [r.OfRoi.Name for r in sub_structure_set.RoiStructures if r.PrimaryShape is not None]
-        roi_names = [n for n in roi_names if n not in ["External"]]
+        roi_names = [n for n in roi_names if n not in ["External"] and 'clip' not in n.lower() and 'ep' not in n.lower()]
         f.attrs['roi_names'] = roi_names
+        f.attrs['voxel_volume'] = math.prod(plan.TreatmentCourse.TotalDose.InDoseGrid.VoxelSize.values())
+        
 
         for roi_name in roi_names:
 
@@ -55,21 +57,16 @@ def grid_search(gaze_angles, h5py_path, patient_id):
             f.create_dataset(f'{roi_name}_relative_volumes', data=roi_rel_vols)
 
         for angle in gaze_angles:
-            print(angle)
 
             #set gaze angles
             field.GazeAngles.PolarGazeAngle = angle[0]
             field.GazeAngles.AzimuthalGazeAngle = angle[1]
-            print('angle set')
 
             #calculate dose
-            print('try treatandprotect')
             beam_set.TreatAndProtect(ShowProgress=False)
-            print('try computedose')
             beam_set.ComputeDose(ComputeBeamDoses=True, DoseAlgorithm="IonPencilBeam", ForceRecompute=False, RunEntryValidation=True)
 
-            print('extreact dose')
-            plan_dose = plan.TreatmentCourse.TotalDose.DoseValues.DoseData.flatten()
+            plan_dose = plan.TreatmentCourse.TotalDose.DoseValues.DoseData.flatten()/100
             f.create_dataset(str(angle), data=plan_dose)
 
 def main():

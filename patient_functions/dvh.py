@@ -97,14 +97,11 @@ def get_metric(self, metric, roi, dose):
     return dose, vol"""
 
 
-def cumulative_dvh(dose, frac, voxel_vol, bins=1000, dose_range=(0,6000)):
+def cumulative_dvh(dose, frac, voxel_vol, bins=1000):
     assert dose.shape == frac.shape
     v = frac * voxel_vol  # volume contributed by each voxel
- 
-    if dose_range is None:
-        dmin, dmax = float(dose.min()), float(dose.max())
-    else:
-        dmin, dmax = dose_range
+    dmin = 0
+    dmax = float(dose.max())
     
     total_vol = np.sum(v)
 
@@ -125,7 +122,7 @@ def cumulative_dvh(dose, frac, voxel_vol, bins=1000, dose_range=(0,6000)):
     return dose, vol
 
 
-def get_dose_at_volume(dose_array, volume):
+def get_dose_at_volume(dvh_dose, dvh_volume, volume):
     """
     Get dose at specified volume from DVH.
 
@@ -146,7 +143,7 @@ def get_dose_at_volume(dose_array, volume):
     dose = dose_array[int(volume * (len(dose_array)-1) / 100.0)]
     return dose
 
-def get_volume_at_dose(dose_array, dose):
+def get_volume_at_dose(dvh_dose, dvh_volume, dose):
     """
     Get volume at specified dose from DVH.
 
