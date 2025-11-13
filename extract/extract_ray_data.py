@@ -70,13 +70,13 @@ def grid_search(gaze_angles, h5py_path, patient_id):
             f.create_dataset(str(angle), data=plan_dose)
 
 def main():
-    patient_id = 'P23336'
+    patient_id = '23129'
     
     start_time = time.time()
     gaze_angles = [(0,0)]+[(25, a) for a in np.arange(0, 360, 45)]
     grid_search(
         gaze_angles=gaze_angles,
-        h5py_path=f'test/{patient_id}_9_angles.h5',
+        h5py_path=f'results/{patient_id}/{patient_id}_9_angles.h5',
         patient_id=patient_id,
     )
 

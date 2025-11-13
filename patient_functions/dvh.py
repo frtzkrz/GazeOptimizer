@@ -58,43 +58,6 @@ def get_metric(self, metric, roi, dose):
     else:
         raise ValueError("Metric must start with 'D' or 'V'.")
 
-#def cumulative_dvh(total_dose, num_points=1000):
-    """
-    Compute cumulative dose-volume histogram (DVH).
-
-    Parameters
-    ----------
-    dose_array : array-like
-        Dose values (in cGy) for all voxels of the organ.
-    num_points : int
-        Number of dose bins (default: 100).
-
-    Returns
-    -------
-    dose_bins : np.ndarray
-        Dose values corresponding to the DVH curve (in cGy).
-    dvh : np.ndarray
-        Cumulative volume fraction (0–100) for each dose bin.
-    """
-    """total_dose = np.asarray(total_dose)
-    
-    # Define equally spaced dose bins from 0 to max dose
-    dose = np.linspace(0, total_dose.max(), int(num_points))
-    
-    # Sort dose values once for efficiency
-    sorted_dose = np.sort(total_dose)
-    n = len(sorted_dose)
-
-    # For each bin, find how many voxels ≥ dose (using searchsorted for speed)
-    counts = n - np.searchsorted(sorted_dose, dose, side='left')
-
-    # Normalize to get %
-    vol = 100*(counts / n)
-
-    number_roi_voxels = np.size(total_dose)
-    
-
-    return dose, vol"""
 
 
 def cumulative_dvh(dose, frac, voxel_vol, bins=1000):
@@ -122,6 +85,8 @@ def cumulative_dvh(dose, frac, voxel_vol, bins=1000):
     return dose, vol
 
 
+
+#NOT UPDATED ANYMORE; USE METHOD OF ROIDVH, delete eventually
 def get_volume_at_dose(dvh_dose, dvh_volume, dose):
     """
     Return Vx: the volume (%) receiving at least dose.
@@ -140,6 +105,7 @@ def get_volume_at_dose(dvh_dose, dvh_volume, dose):
     return np.interp(dose, dvh_dose, dvh_volume)
 
 
+#NOT UPDATED ANYMORE; USE METHOD OF ROIDVH, delete eventually
 def get_dose_at_volume(dvh_dose, dvh_volume, volume, clip=True):
     """
     Return Dx: the dose corresponding to volume x.
@@ -178,7 +144,10 @@ def get_ray_dvh(path='results/P23336_ray_dvhs.txt'):
     return dvh_data
 
 
-def compare_dvhs(self, ray_path):
+def compare_dvhs(self, ray_path, plot_folder):
+    """
+    Compares selfcalculated 
+    """
     ray_dvhs = get_ray_dvh(path=ray_path)
     plt.figure()
     for i, roi_name in enumerate(self.roi_names):
@@ -199,4 +168,4 @@ def compare_dvhs(self, ray_path):
     plt.ylabel('Volume (%)')
     plt.legend(loc='upper left')
     plt.grid()
-    plt.show()
+    plt.savefig(f'{plot_folder}/{self.patient_id}.png', dpi=200)

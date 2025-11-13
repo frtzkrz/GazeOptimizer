@@ -6,6 +6,7 @@ from patient_functions.plotting import *
 from patient_functions.filter_dvh import *
 from patient_functions.dvh import *
 from patient_functions.cost import *
+from patient_functions.helpers import *
 
 import time
 
@@ -24,12 +25,58 @@ class RoiDVH:
             voxel_vol = patient.voxel_vol, 
             bins=patient.num_dvh_bins)
 
-    def plot(self, ax):
-        ax.plot(self.dose, self.volume)
+    def plot(self, ax, plot_args={}):
+        ax.plot(self.dose, self.volume, **plot_args)
     
     def get_dvh(self):
         return self.dose, self.volume
     
+    def get_volume_at_dose(self, dose):
+        """
+        Return Vx: the volume (%) receiving at least dose.
+        dvh_dose, dvh_volume can be ascending or descending; handles both.
+        """
+        # Ensure numpy arrays
+        dvh_dose = np.asarray(self.dose)
+        dvh_volume = np.asarray(self.volume)
+        
+        # Make sure dose is ascending for interpolation
+        if dvh_dose[0] > dvh_dose[-1]:
+            dvh_dose = dvh_dose[::-1]
+            dvh_volume = dvh_volume[::-1]
+        
+        # Interpolate volume at dose x
+        return np.interp(dose, dvh_dose, dvh_volume)
+
+    def get_dose_at_volume(self, volume):
+        """
+        Return Dx: the dose corresponding to volume x.
+        - x can be scalar or array (volume units).
+        - If clip=True (default), x outside the range of `volume` is clipped to min/max.
+        If clip=False, np.interp will extrapolate using end values (which is usually undesirable).
+        Assumes `volume` is cumulative DVH (monotonic, typically decreasing with dose).
+        """
+        dvh_dose = np.asarray(self.dose)
+        dvh_volume = np.asarray(self.volume)
+
+        # np.interp requires the xp (here: volume) to be ascending.
+        # If volume is descending, reverse both arrays to make volume ascending.
+        if dvh_volume[0] > dvh_volume[-1]:
+            dvh_dose = dvh_dose[::-1]
+            dvh_volume = dvh_volume[::-1]
+        volume = np.asarray(volume)
+        volume = np.clip(volume, dvh_volume.min(), dvh_volume.max())
+        # interpolate dose as a function of volume (xp=volume, fp=dose)
+        return np.interp(volume, dvh_volume, dvh_dose)
+    
+    def get_dvh_auc(self):
+        return np.trapz(y=self.volume, x=self.dose)
+    
+    def get_metric_value(self, metric):
+        if metric['metric_type'] == 'D':
+            return self.get_dose_at_volume(metric['value'])
+        else: return self.get_volume_at_dose(metric['value'])
+
 
 class GazeAngleDVHs:
     def __init__(
@@ -37,15 +84,36 @@ class GazeAngleDVHs:
         patient,
         angle_key,
         dose,
-    ):
-        self.patient_id = patient.patient_id
+    ):  
+        self.patient = patient
         self.angle_key = angle_key
         self.roi_dvhs = {}
         for roi_name in patient.roi_names:
             self.roi_dvhs[roi_name] = RoiDVH(patient, roi_name, dose)
             
+    def calculate_cost(self):
+        return self.patient.cost_1_beam(self.angle_key, full_results=False)
+    
+    def calculate_volume_term(self):
+        volume_term = 0
+        for roi_name in self.patient.roi_names:
+            w = next((item["weight"] for item in self.patient.weights if item["roi_name"] == roi_name), 1)
+            x = self.roi_dvhs[roi_name].get_dvh_auc()/100
+            volume_term += w * x
+        return volume_term
+    
+    def calculate_metric_term(self):
+        metric_term = 0
+        for i, weight in enumerate(self.patient.weights):
+            #print(weight)
+            if weight['metric_type'] == 'D':
+                metric_value = self.roi_dvhs[weight['roi_name']].get_dose_at_volume(volume=weight['value'])
+            
+            else: 
+                metric_value = self.roi_dvhs[weight['roi_name']].get_volume_at_dose(dose=weight['value'])
 
-        
+            metric_term += weight['weight'] * metric_value
+        return metric_term
 
 class Patient:
     def __init__(
@@ -58,7 +126,7 @@ class Patient:
         print(f'Initializing Patient {patient_id}...', end='\r')
         self.patient_id = patient_id
         self.h5py_file_path = h5py_file_path   
-        self.weights = weights
+        self.weights = convert_weights(weights)
         self.num_dvh_bins = num_dvh_bins
 
         #extract gaze angles, metrics, costs, and dvh data from h5py file
@@ -67,6 +135,7 @@ class Patient:
             self.gaze_angle_keys = [key for key in f_keys if '(' in key]
             self.gaze_angles = np.array([ast.literal_eval(item) for item in self.gaze_angle_keys])
             self.roi_names = h5_file.attrs['roi_names']
+            self.roi_names = [roi for roi in self.roi_names if roi.lower() != 'tumor']
             self.roi_masks = {roi_name: h5_file[f'{roi_name}_mask'][:] for roi_name in self.roi_names}
             self.roi_relative_values = {roi_name: h5_file[f'{roi_name}_relative_volumes'][:] for roi_name in self.roi_names}
             self.voxel_vol = h5_file.attrs['voxel_volume']
@@ -88,6 +157,11 @@ class Patient:
         self.azimuthal = self.gaze_angles[:,1]
         self.theta = np.deg2rad(self.azimuthal) #used for polar plots
         self.num_dvh_bins = num_dvh_bins
+
+
+    
+    def set_weights(self, weights):
+        self.weights = convert_weights(weights)
 
         
 
@@ -152,13 +226,16 @@ class Patient:
     def get_metric(self, metric, roi, total_dose):
         raise NotImplementedError
 
-    def cost(self, weights, dose):
+    def cost_1_beam(self, weights, dose):
         raise NotImplementedError
     
     def minimizer(self, dose_1, dose_2):
         raise NotImplementedError
     
     def compare_dvhs(self, ray_path):
+        raise NotImplementedError
+    
+    def apply_dvh_filters(self, dvh_filters):
         raise NotImplementedError
     
 
@@ -181,9 +258,10 @@ Patient.test_gaze_combination = test_gaze_combination
 Patient.get_dose_at_volume = get_dose_at_volume
 Patient.get_volume_at_dose = get_volume_at_dose
 Patient.get_metric = get_metric
-Patient.cost = cost
+Patient.cost_1_beam = cost_1_beam
 Patient.minimizer = minimizer
 Patient.compare_dvhs = compare_dvhs
+Patient.apply_dvh_filters = apply_dvh_filters
 
 def main():
     

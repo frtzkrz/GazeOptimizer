@@ -7,14 +7,14 @@ from scipy.interpolate import griddata
 import os
 
 
-def single_gaze_plot(self, ax, metric, filtered_gaze_angle_keys=None):
-    """
+#def single_gaze_plot(self, ax, metric, filtered_gaze_angle_keys=None):
+"""
     Add gaze scatter plot to ax.
     ax: plt.axis
     metric: i.e. 'D2_Macula'
     f: h5py file
     """
-    vmin = np.min(self.costs)
+""" vmin = np.min(self.costs)
     vmax = np.max(self.costs)
     #if no gaze angle keys are provided, plot all gaze angles
     if filtered_gaze_angle_keys is None:
@@ -48,7 +48,26 @@ def single_gaze_plot(self, ax, metric, filtered_gaze_angle_keys=None):
         label = '% Volume'
 
     plt.colorbar(sc, ax=ax, fraction=0.05, label=label)
-    ax.set_title(metric)
+    ax.set_title(metric)"""
+
+def single_gaze_plot(self, ax, metric, filtered_gaze_angle_keys=None):
+    #metric: {'roi_name': 'Macula', 'metric_type': 'D', 'value': 20}
+    #opt_cost = self.cost_1_beam(weights, gaze_angle, full_results=False)
+    gaze_candidates = self.gaze_angle_keys if not filtered_gaze_angle_keys else filtered_gaze_angle_keys
+
+    if metric == 'total_cost':
+        costs = [self.gaze_angle_dvhs[gaze_angle].calculate_cost() for gaze_angle in gaze_candidates]
+    
+    elif metric == 'volume_term':
+        costs = [self.gaze_angle_dvhs[gaze_angle].calculate_volume_term() for gaze_angle in gaze_candidates]
+
+    else: 
+        costs = [self.gaze_angle_dvhs[gaze_angle].roi_dvhs[metric['roi_name']].get_metric_value(metric) for gaze_angle in gaze_candidates]
+
+    
+    sc = ax.scatter(self.theta, self.polar, c=costs, cmap='viridis', s=60)
+    return sc
+
 
 def full_scatter_plot(self, plot_folder=None, filtered_gaze_angle_keys=None, filter_dict=None):
     if plot_folder is None:

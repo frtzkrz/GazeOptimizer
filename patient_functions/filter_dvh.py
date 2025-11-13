@@ -9,17 +9,10 @@ def find_gaze_angle_smaller_dvol(self, roi, vol, max_dose, filtered_gaze_angle_k
     vol: 0<vol<100
     maxdose: float/int in Gy
     """
-    #find bin index that corresponds to volume of interest
-    vol_idx = int(np.round(self.num_dvh_bins*vol/100))
-
-    #argmin scaled to accomodate different num_dvh_bins selections
-    if filtered_gaze_angle_keys is not None:
-        dvhs = {k: dvhs[k] for k in filtered_gaze_angle_keys}
-    else: dvhs = self.dvh_dict[roi]
-
-    #find gaze angles for which D_vol < max_dose
-    filtered_gaze_angle_keys = [gaze_angle_key for gaze_angle_key in dvhs if dvhs[gaze_angle_key][vol_idx]<max_dose*100] #mult by 100 bc dose is stored in cGy
+    gaze_angle_selection = filtered_gaze_angle_keys if filtered_gaze_angle_keys is not None else self.gaze_angle_keys
+    filtered_gaze_angle_keys = [gaze_angle_key for gaze_angle_key in gaze_angle_selection if self.gaze_angle_dvhs[gaze_angle_key].roi_dvhs[roi].get_dose_at_volume(vol) < max_dose]
     return filtered_gaze_angle_keys
+
 
 def find_gaze_angle_smaller_vdose(self, roi, dose, max_vol, filtered_gaze_angle_keys=None):
     """
@@ -30,18 +23,10 @@ def find_gaze_angle_smaller_vdose(self, roi, dose, max_vol, filtered_gaze_angle_
     max_vol: 0<vol<100
     dose: float/int in Gy
     """
-
-    #argmin scaled to accomodate different num_dvh_bins selections
-    if filtered_gaze_angle_keys is not None:
-        dvhs = {k: self.dvh_dict[roi][k] for k in filtered_gaze_angle_keys}
-    else: dvhs = self.dvh_dict[roi]
-
-
-    #find gaze angles for which V_dose < max_vol
-    #dose scaled by 100 for cGy>Gy
-
-    filtered_gaze_angle_keys = [gaze_angle_key for gaze_angle_key in dvhs if np.round(np.abs(dvhs[gaze_angle_key] - dose*100).argmin()/100*self.num_dvh_bins)<max_vol]
+    gaze_angle_selection = filtered_gaze_angle_keys if filtered_gaze_angle_keys is not None else self.gaze_angle_keys
+    filtered_gaze_angle_keys = [gaze_angle_key for gaze_angle_key in gaze_angle_selection if self.gaze_angle_dvhs[gaze_angle_key].roi_dvhs[roi].get_volume_at_dose(dose) < max_vol]
     return filtered_gaze_angle_keys
+
 
 def find_new_optimal_gaze_angles(self, filtered_gaze_angle_keys):
     """
@@ -56,3 +41,16 @@ def find_new_optimal_gaze_angles(self, filtered_gaze_angle_keys):
     optimal_gaze_angle_key = filtered_gaze_angle_keys[idx_min_filtered]
     optimal_cost = filtered_costs[idx_min_filtered]
     return {'New Optimum': optimal_gaze_angle_key}
+
+def apply_dvh_filters(self, dvh_filters):
+    #filter = {'roi_name': 'Macula', 'filter_type': 'D', 'value': 50, 'max_val': 30} <- D50_Macula < 30Gy
+    current_keys = self.gaze_angle_keys
+    for dvh_filter in dvh_filters:
+        if dvh_filter['filter_type'] == 'D':
+            current_keys = self.find_gaze_angle_smaller_dvol(roi=dvh_filter['roi_name'], vol=dvh_filter['value'], max_dose=dvh_filter['max_val'], filtered_gaze_angle_keys=current_keys)
+        elif dvh_filter['filter_type'] == 'V':
+            current_keys = self.find_gaze_angle_smaller_vdose(roi=dvh_filter['roi_name'], dose=dvh_filter['value'], max_vol=dvh_filter['max_val'], filtered_gaze_angle_keys=current_keys)
+        if len(current_keys) == 0:
+            print('No gaze angle exists.')
+            print(f'(Stopped at {dvh_filter})')
+    return current_keys
