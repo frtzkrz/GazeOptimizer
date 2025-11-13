@@ -18,11 +18,11 @@ def main():
     max_polar_deg = 25
     weights = {'D2_Macula': 3, 'D20_OpticalDisc': 3, 'D20_Cornea': 1, 'V55_Retina':1, 'V27_CiliaryBody': 1, 'D5_Lens': 1}
 
-    #Optimizer = GazeOptimizer(
-    #    patient_id = patient_id,
-    #    delta_polar=delta_polar,
-    #    h5py_file_path=f'results/{patient_id}_{delta_polar}.h5',
-    #    )
+    Optimizer = GazeOptimizer(
+        patient_id = patient_id,
+        delta_polar=delta_polar,
+        h5py_file_path=f'results/{patient_id}_{delta_polar}.h5',
+        )
 
     
     start_time = time.time()

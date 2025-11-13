@@ -58,7 +58,7 @@ def get_metric(self, metric, roi, dose):
     else:
         raise ValueError("Metric must start with 'D' or 'V'.")
 
-def cumulative_dvh(total_dose, num_points=1000):
+#def cumulative_dvh(total_dose, num_points=1000):
     """
     Compute cumulative dose-volume histogram (DVH).
 
@@ -76,7 +76,7 @@ def cumulative_dvh(total_dose, num_points=1000):
     dvh : np.ndarray
         Cumulative volume fraction (0–100) for each dose bin.
     """
-    total_dose = np.asarray(total_dose)
+    """total_dose = np.asarray(total_dose)
     
     # Define equally spaced dose bins from 0 to max dose
     dose = np.linspace(0, total_dose.max(), int(num_points))
@@ -91,7 +91,39 @@ def cumulative_dvh(total_dose, num_points=1000):
     # Normalize to get %
     vol = 100*(counts / n)
 
+    number_roi_voxels = np.size(total_dose)
+    
+
+    return dose, vol"""
+
+
+def cumulative_dvh(dose, frac, voxel_vol, bins=1000, dose_range=(0,6000)):
+    assert dose.shape == frac.shape
+    v = frac * voxel_vol  # volume contributed by each voxel
+ 
+    if dose_range is None:
+        dmin, dmax = float(dose.min()), float(dose.max())
+    else:
+        dmin, dmax = dose_range
+    
+    total_vol = np.sum(v)
+
+    # Make bins (edges)
+    edges = np.linspace(dmin, dmax, bins + 1)
+    # differential DVH: sum volumes per dose bin
+    bin_idx = np.searchsorted(edges, dose, side='right') - 1
+    # clamp indices
+    bin_idx = np.clip(bin_idx, 0, bins-1)
+    diff = np.bincount(bin_idx, weights=v, minlength=bins)  # volumes per bin
+ 
+    # cumulative DVH (volume >= D) — compute from the top
+    # create center points for bins (optional)
+    dose = 0.5 * (edges[:-1] + edges[1:])
+    # cumulative from high dose to low dose:
+    vol = np.cumsum(diff[::-1])[::-1]/total_vol*100
+ 
     return dose, vol
+
 
 def get_dose_at_volume(dose_array, volume):
     """

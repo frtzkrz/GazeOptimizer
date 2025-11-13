@@ -16,8 +16,9 @@ def main():
 
     #initialize patient
     pat = Patient(patient_id=patient_id, h5py_file_path=f'results/{patient_id}_5.h5')
+    print(np.shape(pat.roi_mask_dict['Macula']))
 
-    #define filter criteria
+    """#define filter criteria
     filter_dict = {
         'name': 'D90_Macula', 
         'roi': 'Macula', 
@@ -36,10 +37,10 @@ def main():
     start_time = time.time()
     
     #first round of filtering
-    filtered_keys = pat.full_filtered_metric_dvh_plot(filter_dict=filter_dict, plot_folder=None, save_fig=False)
+    filtered_keys = pat.full_filtered_metric_dvh_plot(filter_dict=filter_dict, plot_folder=plot_folder, save_fig=True)
 
     #second round of filtering based on first round
-    filtered_keys_2 = pat.full_filtered_metric_dvh_plot(filter_dict=filter_dict_2, plot_folder=None, save_fig=False, filtered_gaze_angle_keys=filtered_keys)
+    filtered_keys_2 = pat.full_filtered_metric_dvh_plot(filter_dict=filter_dict_2, plot_folder=plot_folder, save_fig=True, filtered_gaze_angle_keys=filtered_keys)
 
     #find new optimal gaze angles after filtering
     new_opt = pat.find_new_optimal_gaze_angles(filtered_gaze_angle_keys=filtered_keys_2)['New Optimum']
@@ -47,7 +48,7 @@ def main():
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Elapsed time: {elapsed_time:.2f} seconds")
-    plt.show()
+    plt.show()"""
 
 if __name__ == "__main__":
     main()

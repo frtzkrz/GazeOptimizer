@@ -100,6 +100,13 @@ def get_roi_mask(self, roi_name):
     mask = dgr.RoiVolumeDistribution.VoxelIndices
     return mask
 
+def get_roi_relative_volumes(self, roi_name):
+    plan = get_current('Plan')
+
+    dgr = plan.TreatmentCourse.TotalDose.GetDoseGridRoi(RoiName = roi_name)
+    mask = dgr.RoiVolumeDistribution.VoxelIndices
+
+
 def get_roi_names(self):
     beam_set = get_current('BeamSet')
     sub_structure_set = beam_set.DependentSubStructureSet
