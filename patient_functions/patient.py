@@ -27,6 +27,9 @@ class RoiDVH:
     def plot(self, ax):
         ax.plot(self.dose, self.volume)
     
+    def get_dvh(self):
+        return self.dose, self.volume
+    
 
 class GazeAngleDVHs:
     def __init__(
@@ -49,7 +52,7 @@ class Patient:
         self, 
         patient_id, 
         h5py_file_path, 
-        num_dvh_bins=200,
+        num_dvh_bins=1000,
         weights={'D2_Macula': 3, 'D20_OpticalDisc': 3, 'D20_Cornea': 1, 'V55_Retina':1, 'V27_CiliaryBody': 1, 'D5_Lens': 1},
         ):
         print(f'Initializing Patient {patient_id}...', end='\r')

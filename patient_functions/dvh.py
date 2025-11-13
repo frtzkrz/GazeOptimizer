@@ -122,48 +122,44 @@ def cumulative_dvh(dose, frac, voxel_vol, bins=1000):
     return dose, vol
 
 
-def get_dose_at_volume(dvh_dose, dvh_volume, volume):
-    """
-    Get dose at specified volume from DVH.
-
-    Parameters
-    ----------
-    dvh : np.ndarray
-        dose values (in cGy)
-    volume : float
-        Volume percentage (0-100) at which to find the dose.
-
-    Returns
-    -------
-    dose : float
-        Dose at volume in cGy
-    """
-    # Find index where dvh is just above the specified volume
-
-    dose = dose_array[int(volume * (len(dose_array)-1) / 100.0)]
-    return dose
-
 def get_volume_at_dose(dvh_dose, dvh_volume, dose):
     """
-    Get volume at specified dose from DVH.
-
-    Parameters
-    ----------
-    dvh : np.ndarray
-        Cumulative volume fraction (0–1) for each dose bin.
-    dose : float
-        Dose value at which to find the volume.
-
-    Returns
-    -------
-    volume : float
-        Volume in % at dose
+    Return Vx: the volume (%) receiving at least dose.
+    dvh_dose, dvh_volume can be ascending or descending; handles both.
     """
-    # Find index where dvh is just below the specified dose
-    n_bins = len(dose_array)
-    volume_index = np.where(dose_array >= dose)[0][-1]
-    volume = np.linspace(0, 100, n_bins)[volume_index]
-    return volume
+    # Ensure numpy arrays
+    dvh_dose = np.asarray(dvh_dose)
+    dvh_volume = np.asarray(dvh_volume)
+    
+    # Make sure dose is ascending for interpolation
+    if dvh_dose[0] > dvh_dose[-1]:
+        dvh_dose = dvh_dose[::-1]
+        dvh_volume = dvh_volume[::-1]
+    
+    # Interpolate volume at dose x
+    return np.interp(dose, dvh_dose, dvh_volume)
+
+
+def get_dose_at_volume(dvh_dose, dvh_volume, volume, clip=True):
+    """
+    Return Dx: the dose corresponding to volume x.
+    - x can be scalar or array (volume units).
+    - If clip=True (default), x outside the range of `volume` is clipped to min/max.
+      If clip=False, np.interp will extrapolate using end values (which is usually undesirable).
+    Assumes `volume` is cumulative DVH (monotonic, typically decreasing with dose).
+    """
+    dvh_dose = np.asarray(dvh_dose)
+    dvh_volume = np.asarray(dvh_volume)
+
+    # np.interp requires the xp (here: volume) to be ascending.
+    # If volume is descending, reverse both arrays to make volume ascending.
+    if dvh_volume[0] > dvh_volume[-1]:
+        dvh_dose = dvh_dose[::-1]
+        dvh_volume = dvh_volume[::-1]
+    volume = np.asarray(volume)
+    volume = np.clip(volume, dvh_volume.min(), dvh_volume.max())
+    # interpolate dose as a function of volume (xp=volume, fp=dose)
+    return np.interp(volume, dvh_volume, dvh_dose)
 
 def get_ray_dvh(path='results/P23336_ray_dvhs.txt'):
     dvh_data = {}
@@ -174,7 +170,6 @@ def get_ray_dvh(path='results/P23336_ray_dvhs.txt'):
             line = line.strip()
             if line.startswith('#RoiName'):
                 current_roi = line.split(':')[1].strip()
-                print(current_roi)
                 dvh_data[current_roi] = {'dose': [], 'volume': []}
             elif current_roi and line and not line.startswith('#'):
                 dose_val, vol_val = map(float, line.split())
@@ -183,25 +178,24 @@ def get_ray_dvh(path='results/P23336_ray_dvhs.txt'):
     return dvh_data
 
 
-def compare_dvhs(self, ray_path, total_dose):
+def compare_dvhs(self, ray_path):
     ray_dvhs = get_ray_dvh(path=ray_path)
     plt.figure()
-    for i, roi in enumerate(self.rois):
+    for i, roi_name in enumerate(self.roi_names):
         color = plt.rcParams['axes.prop_cycle'].by_key()['color'][i % 10]
 
-        dose_ray = np.array(ray_dvhs[roi]['dose'])*100
-        vol_ray = ray_dvhs[roi]['volume']
+        dose_ray = np.array(ray_dvhs[roi_name]['dose'])*100
+        vol_ray = ray_dvhs[roi_name]['volume']
 
-        my_dose, my_vol = cumulative_dvh(total_dose[self.roi_mask_dict[roi]])
+        my_dose, my_vol = self.gaze_angle_dvhs['(0, 0)'].roi_dvhs[roi_name].get_dvh()
 
-        
-        plt.plot(dose_ray, vol_ray, linestyle='--', color=color)
+        plt.plot(dose_ray/100, vol_ray, linestyle='--', color=color)
         plt.plot(my_dose, my_vol, color=color)
     
     plt.plot([], [], 'k--', label='RayStation DVH')
     plt.plot([], [], 'k-', label='Calculated DVH')
-    plt.title('DVH Comparison (-- RayStation)')
-    plt.xlabel('Dose (cGy)')
+    plt.title('DVH Comparison')
+    plt.xlabel('Dose (Gy)')
     plt.ylabel('Volume (%)')
     plt.legend(loc='upper left')
     plt.grid()

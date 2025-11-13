@@ -16,20 +16,9 @@ def main():
     plot_folder = f'plots/{patient_id}'
 
     #initialize patient
-    pat = Patient(patient_id=patient_id, h5py_file_path=f'results/{patient_id}_5.h5')
-    print(pat.optimal_angle_key)
-    with h5py.File(pat.h5py_file_path, "r") as h5_file:
-        total_dose = h5_file['gaze_angles'][pat.optimal_angle_key]['total_dose'][:]
+    pat = Patient(patient_id=patient_id, h5py_file_path=f'test/{patient_id}_9_angles.h5')
     
-    pat.compare_dvhs(ray_path=f'results/{patient_id}_ray_dvhs.txt', total_dose=total_dose)
-
-    start_time = time.time()
-    
-
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"Elapsed time: {elapsed_time:.2f} seconds")
-    
+    pat.compare_dvhs(ray_path=f'results/{patient_id}_ray_dvhs.txt')
 
 if __name__ == "__main__":
     main()
