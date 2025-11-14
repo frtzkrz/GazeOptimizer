@@ -1,14 +1,216 @@
 import numpy as np
 import h5py
 import pandas as pd
+from scipy.optimize import minimize_scalar
 import ast
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import seaborn as sns
+
+
 from patient_functions.plotting import *
 from patient_functions.filter_dvh import *
 from patient_functions.dvh import *
 from patient_functions.cost import *
 from patient_functions.helpers import *
+from patient_functions.gaze_combo import *
+
 
 import time
+
+class TwoBeam:
+    def __init__(
+        self,
+        patient,
+        h5py_file_path,
+        gaze_angle_key_1,
+        gaze_angle_key_2,
+        weight,
+    ):  
+
+        self.h5py_file_path = h5py_file_path
+        self.patient = patient
+        self.gaze_angle_key_1 = gaze_angle_key_1
+        self.gaze_angle_key_2 = gaze_angle_key_2
+        self.weight = weight
+        with h5py.File(self.h5py_file_path, "r") as h5_file:
+            self.dose_1 = h5_file[self.gaze_angle_key_1][:]
+            self.dose_2 = h5_file[self.gaze_angle_key_2][:]
+        self.combined_dose = self.weight*self.dose_1 + (1-self.weight)*self.dose_2
+        self.dvhs = GazeAngleDVHs(
+            patient=self.patient, 
+            angle_key=self.gaze_angle_key_1,
+            angle_key_2=self.gaze_angle_key_2,
+            dose=self.combined_dose)
+    
+    def update_doses(self):
+        with h5py.File(self.h5py_file_path, "r") as h5_file:
+            self.dose_1 = h5_file[self.gaze_angle_key_1][:]
+            self.dose_2 = h5_file[self.gaze_angle_key_2][:]
+        self.combined_dose = self.weight*self.dose_1 + (1-self.weight)*self.dose_2
+
+    def set_new_gaze_angles(self, gaze_angle_keys):
+        self.gaze_angle_key_1 = gaze_angle_keys[0]
+        self.gaze_angle_key_2 = gaze_angle_keys[1]
+        self.update_doses()
+        self.update_dvhs()
+        
+
+    def calculate_dose(self):
+        return self.weight*self.dose_1 + (1-self.weight)*self.dose_2
+    
+    def set_new_weight(self, new_weight):
+        self.weight = new_weight
+        self.combined_dose = self.calculate_dose()
+    
+    def update_dvhs(self):
+        self.dvhs = GazeAngleDVHs(
+            patient=self.patient, 
+            angle_key=self.gaze_angle_key_1,
+            angle_key_2=self.gaze_angle_key_2,
+            dose=self.combined_dose)
+    
+    def optimize_weight(self):
+        def cost_wrapper(w):
+            self.set_new_weight(w)
+            self.update_dvhs()
+            cost = self.dvhs.calculate_cost()
+            print(np.round(w, 3), np.round(cost, 3))
+            return cost
+        
+        res = minimize_scalar(
+            fun=cost_wrapper,
+            bounds=(0, 1),
+        )
+        return res
+    
+    def full_weight_search(self, full_output=False, n_steps=10):
+        ws = np.linspace(0, 1, n_steps)
+        costs = []
+        gaze_angle_dvhs = []
+        for w in ws:
+            self.set_new_weight(w)
+            self.update_dvhs()
+            cost = self.dvhs.calculate_cost()
+            gaze_angle_dvhs.append(self.dvhs)
+            costs.append(cost)
+        costs = np.asarray(costs)
+        opt_idx = np.argmin(costs)
+        opt_cost = costs[opt_idx]
+        opt_w = ws[opt_idx]
+        opt_dvh = gaze_angle_dvhs[opt_idx]
+        if full_output: return ws, costs, gaze_angle_dvhs
+        else: 
+            return opt_w, opt_cost, opt_dvh
+    
+    def plot_weight_search(self, n_steps=10):
+        n_plots = len(self.patient.roi_names)
+        ws, costs, gaze_angle_dvhs = self.full_weight_search(full_output=True, n_steps=n_steps)
+        opt_idx = np.argmin(np.asarray(costs))
+        opt_cost = costs[opt_idx]
+        opt_w = ws[opt_idx]
+        
+        norm = plt.Normalize(min(costs), max(costs))
+        cmap = plt.cm.viridis
+
+        fig, axes = plt.subplots(4, 3, figsize=(10,10), constrained_layout=True)
+        plt.suptitle(f'{self.gaze_angle_key_1} + {self.gaze_angle_key_2} ({self.patient.patient_id})')
+        ax = axes.flatten()[0]
+        ax.scatter(ws, costs, c=costs, cmap=cmap, norm=norm, s=80)
+        ax.scatter(opt_w, opt_cost, color='red', s=100)
+        ax.set_title(f'Weights vs. Costs')
+        ax.set_xlabel("Weight")
+        ax.set_ylabel("Cost")
+
+        dvhs_1 = self.patient.gaze_angle_dvhs[self.gaze_angle_key_1]
+        dvhs_2 = self.patient.gaze_angle_dvhs[self.gaze_angle_key_2]
+
+        for roi_name, ax in zip(self.patient.roi_names, axes.flatten()[1:]):
+            for w, cost, gaze_angle_dvh in zip(ws, costs, gaze_angle_dvhs):
+                color = 'red' if cost == opt_cost else cmap(norm(cost)) 
+                z = 10 if cost==opt_cost else 1
+                alpha = 1 if cost==opt_cost else 0.5
+                gaze_angle_dvh.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': color, 'zorder': z, 'alpha': alpha})
+
+                ax.set_title(roi_name)
+                ax.set_xlabel("Dose (Gy)")
+                ax.set_ylabel("Volume (%)")
+            
+            dvhs_1.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '--', 'label': f'{self.gaze_angle_key_1}', 'zorder': 2, 'lw': 1})
+            dvhs_2.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '-.', 'label': f'{self.gaze_angle_key_2}', 'zorder': 2, 'lw': 1})
+        plt.legend()
+        plt.savefig(f'plots/{self.patient.patient_id}/two_beams/{self.gaze_angle_key_1}_{self.gaze_angle_key_2}_dvhs.png', dpi=200)
+    
+    def plot_gaze_combo_heatmap(self, costs, weights, ax):
+
+        mask = np.triu(np.ones_like(costs, dtype=bool), k=1).T
+        finite_vals = costs[np.isfinite(costs)]
+        vmin = finite_vals.min()
+        vmax = finite_vals.max()
+        cmap = plt.cm.viridis
+        norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+        
+        sns.heatmap(data=costs, annot=weights, mask=mask, xticklabels=self.patient.gaze_angle_keys, yticklabels=self.patient.gaze_angle_keys, ax=ax, cmap=cmap, vmin=norm.vmin, vmax=norm.vmax, cbar_kws={'label': 'Cost'})
+        return cmap, norm
+
+        
+    def calculate_gaze_combos(self, n_steps=10):
+
+        n = len(self.patient.gaze_angle_keys)
+        all_costs= []
+        all_weights = []
+        all_gaze_angle_dvhs = []
+
+        for i, angle_1 in enumerate(self.patient.gaze_angle_keys):
+            cost_row = [np.inf]*i
+            weight_row = [np.inf]*i
+            dvh_row = [False]*i
+            for j, angle_2 in enumerate(self.patient.gaze_angle_keys[i:]):
+                self.set_new_gaze_angles((angle_1, angle_2))
+                w, cost, dvh = self.full_weight_search(n_steps=n_steps)
+                cost_row.append(cost)
+                weight_row.append(w)
+                dvh_row.append(dvh)
+            all_costs.append(cost_row)
+            all_weights.append(weight_row)
+            all_gaze_angle_dvhs.append(dvh_row)
+        return np.asarray(all_weights), np.asarray(all_costs), np.asarray(all_gaze_angle_dvhs)
+
+    def plot_all_gaze_combos(self, n_steps=10):
+        weights, costs, dvhs = self.calculate_gaze_combos(n_steps=n_steps)
+
+        fig, axes = plt.subplots(4, 3, figsize=(12,12), constrained_layout=True)
+        axes = axes.flatten()
+        cmap, norm = self.plot_gaze_combo_heatmap(costs, weights, axes[0])
+
+        opt_idx = np.unravel_index(costs.argmin(), costs.shape)
+        opt_cost = costs[opt_idx]
+        opt_w = weights[opt_idx]
+        opt_dvh = dvhs[opt_idx[0]][opt_idx[1]]
+
+        angle_1 = opt_dvh.angle_key
+        angle_2 = opt_dvh.angle_key_2
+        dvhs_1 = self.patient.gaze_angle_dvhs[angle_1]
+        dvhs_2 = self.patient.gaze_angle_dvhs[angle_2]
+
+        for roi_name, ax in zip(self.patient.roi_names, axes[1:]):
+            for w, cost, gaze_angle_dvh in zip(weights.flatten(), costs.flatten(), dvhs.flatten()):
+                if gaze_angle_dvh is not False:
+                    if cost == opt_cost:
+                        gaze_angle_dvh.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'red', 'zorder': 3, 'alpha': 1, 'label': f'{np.round(opt_w,2)}*{angle_1} + {np.round(1-opt_w, 2)}*{angle_2}'})
+                    else:
+                        color=cmap(norm(cost))
+                        gaze_angle_dvh.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': color, 'zorder': 1, 'alpha': 0.5})
+
+            dvhs_1.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '--', 'label': f'{angle_1}', 'zorder': 2, 'lw': 1})
+            dvhs_2.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '-.', 'label': f'{angle_2}', 'zorder': 2, 'lw': 1})
+            ax.set_title(roi_name)
+            ax.set_xlabel("Dose (Gy)")
+            ax.set_ylabel("Volume (%)")
+            ax.grid()
+        ax.legend()
+        plt.savefig(f'plots/{self.patient.patient_id}/two_beams/find_optimal_combination.png', dpi=300)
+        
 
 class RoiDVH:
     def __init__(
@@ -33,8 +235,8 @@ class RoiDVH:
     
     def get_volume_at_dose(self, dose):
         """
-        Return Vx: the volume (%) receiving at least dose.
-        dvh_dose, dvh_volume can be ascending or descending; handles both.
+        #Return Vx: the volume (%) receiving at least dose.
+        #dvh_dose, dvh_volume can be ascending or descending; handles both.
         """
         # Ensure numpy arrays
         dvh_dose = np.asarray(self.dose)
@@ -84,16 +286,22 @@ class GazeAngleDVHs:
         patient,
         angle_key,
         dose,
+        angle_key_2=None,
     ):  
         self.patient = patient
         self.angle_key = angle_key
+        self.angle_key_2 = angle_key_2
+        self.is_two_beam = True if self.angle_key_2 is not None else False
         self.roi_dvhs = {}
         for roi_name in patient.roi_names:
             self.roi_dvhs[roi_name] = RoiDVH(patient, roi_name, dose)
-            
-    def calculate_cost(self):
-        return self.patient.cost_1_beam(self.angle_key, full_results=False)
     
+    def calculate_cost(self):
+        metric_term = self.calculate_metric_term()
+        volume_term = self.calculate_volume_term()
+        self.cost = metric_term + volume_term
+        return self.cost
+
     def calculate_volume_term(self):
         volume_term = 0
         for roi_name in self.patient.roi_names:
@@ -121,13 +329,15 @@ class Patient:
         patient_id, 
         h5py_file_path, 
         num_dvh_bins=1000,
+        two_beams=False,
         weights={'D2_Macula': 3, 'D20_OpticalDisc': 3, 'D20_Cornea': 1, 'V55_Retina':1, 'V27_CiliaryBody': 1, 'D5_Lens': 1},
         ):
-        print(f'Initializing Patient {patient_id}...', end='\r')
+        print(f'Initializing Patient {patient_id}...\n', end='\r')
         self.patient_id = patient_id
         self.h5py_file_path = h5py_file_path   
         self.weights = convert_weights(weights)
         self.num_dvh_bins = num_dvh_bins
+        self.two_beams = two_beams
 
         #extract gaze angles, metrics, costs, and dvh data from h5py file
         with h5py.File(self.h5py_file_path, "r") as h5_file:
@@ -140,7 +350,6 @@ class Patient:
             self.roi_relative_values = {roi_name: h5_file[f'{roi_name}_relative_volumes'][:] for roi_name in self.roi_names}
             self.voxel_vol = h5_file.attrs['voxel_volume']
 
-
             self.gaze_angle_dvhs = {}
             for gaze_angle_key in self.gaze_angle_keys:
                 dose = h5_file[gaze_angle_key][:]
@@ -149,14 +358,11 @@ class Patient:
                                                             angle_key=gaze_angle_key,
                                                             dose=dose
                                                             )
-
-
-
+                                                    
         #extract polar and azimuthal angles and theta for plotting
         self.polar = self.gaze_angles[:,0]
         self.azimuthal = self.gaze_angles[:,1]
         self.theta = np.deg2rad(self.azimuthal) #used for polar plots
-        self.num_dvh_bins = num_dvh_bins
 
 
     
@@ -164,10 +370,14 @@ class Patient:
         self.weights = convert_weights(weights)
 
         
-
-
-
-
+    def initiate_two_beams(self, gaze_angle_keys, weight):
+        self.two_beam = TwoBeam(
+            patient=self,
+            h5py_file_path=self.h5py_file_path,
+            gaze_angle_key_1=gaze_angle_keys[0],
+            gaze_angle_key_2=gaze_angle_keys[1],
+            weight=weight)
+    
 
     def find_gaze_angle_smaller_vdose(self, dose_distribution, roi, dose, max_vol):
         raise NotImplementedError
@@ -237,6 +447,8 @@ class Patient:
     
     def apply_dvh_filters(self, dvh_filters):
         raise NotImplementedError
+    
+
     
 
 Patient.find_gaze_angle_smaller_vdose = find_gaze_angle_smaller_vdose

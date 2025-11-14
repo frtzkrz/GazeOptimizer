@@ -27,3 +27,5 @@ def minimizer(self, dose_1, dose_2, metric_weights):
 def combined_cost(self, dose_1, dose_2, weights):
     return
 
+def cost_2_beam(self, full_results=False):
+    metric_term = self.two_beams

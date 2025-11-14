@@ -1,0 +1,17 @@
+from patient_functions.patient import *
+
+def main():
+    patient_id = 'P23336'
+    angle_1 = '(25, 0)'
+    angle_2 = '(25, 180)'
+    pat = Patient(patient_id=patient_id, h5py_file_path=f'results/{patient_id}/{patient_id}_9_angles.h5')
+    pat.initiate_two_beams(gaze_angle_keys=(angle_1, angle_2), weight=0.5)
+    pat.two_beam.plot_all_gaze_combos(n_steps=10)
+    #pat.two_beam.plot_weight_search()
+    plt.show()
+
+    #pat.update_two_beams_angles(('(25, 90)', '(25, 270)'))
+    #pat.plot_weight_search(n_steps=10)
+
+if __name__ == "__main__":
+    main()
