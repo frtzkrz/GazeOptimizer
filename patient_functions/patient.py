@@ -139,7 +139,7 @@ class TwoBeam:
             dvhs_1.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '--', 'label': f'{self.gaze_angle_key_1}', 'zorder': 2, 'lw': 1})
             dvhs_2.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '-.', 'label': f'{self.gaze_angle_key_2}', 'zorder': 2, 'lw': 1})
         plt.legend()
-        plt.savefig(f'plots/{self.patient.patient_id}/two_beams/{self.gaze_angle_key_1}_{self.gaze_angle_key_2}_dvhs.png', dpi=200)
+        #plt.savefig(f'plots/{self.patient.patient_id}/two_beams/{self.gaze_angle_key_1}_{self.gaze_angle_key_2}_dvhs.png', dpi=200)
     
     def plot_gaze_combo_heatmap(self, costs, weights, ax):
 
