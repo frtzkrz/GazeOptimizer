@@ -6,6 +6,7 @@ import ast
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import seaborn as sns
+from matplotlib.patches import Rectangle
 
 
 from patient_functions.plotting import *
@@ -22,14 +23,12 @@ class TwoBeam:
     def __init__(
         self,
         patient,
-        h5py_file_path,
         gaze_angle_key_1,
         gaze_angle_key_2,
-        weight,
+        weight=0.5,
     ):  
 
-        self.h5py_file_path = h5py_file_path
-        self.patient = patient
+        self.patient = patient.h5py_file_path
         self.gaze_angle_key_1 = gaze_angle_key_1
         self.gaze_angle_key_2 = gaze_angle_key_2
         self.weight = weight
@@ -42,7 +41,7 @@ class TwoBeam:
             angle_key=self.gaze_angle_key_1,
             angle_key_2=self.gaze_angle_key_2,
             dose=self.combined_dose)
-    
+
     def update_doses(self):
         with h5py.File(self.h5py_file_path, "r") as h5_file:
             self.dose_1 = h5_file[self.gaze_angle_key_1][:]
@@ -68,14 +67,14 @@ class TwoBeam:
             patient=self.patient, 
             angle_key=self.gaze_angle_key_1,
             angle_key_2=self.gaze_angle_key_2,
-            dose=self.combined_dose)
+            dose=self.combined_dose,
+            weight=self.weight)
     
     def optimize_weight(self):
         def cost_wrapper(w):
             self.set_new_weight(w)
             self.update_dvhs()
             cost = self.dvhs.calculate_cost()
-            print(np.round(w, 3), np.round(cost, 3))
             return cost
         
         res = minimize_scalar(
@@ -149,13 +148,23 @@ class TwoBeam:
         vmax = finite_vals.max()
         cmap = plt.cm.viridis
         norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+        mask_diag = np.eye(weights.shape[0], dtype=bool)
+        weights = np.round(weights, 2).astype(str)
+        weights[mask_diag] = ""  # empty string to skip annotation
+
+        min_pos = np.unravel_index(np.argmin(costs), costs.shape)
+        row, col = min_pos
+
+        # Draw red rectangle around the cell
+        rect = Rectangle((col, row), 1, 1, fill=False, edgecolor='red', linewidth=3)
         
-        sns.heatmap(data=costs, annot=weights, mask=mask, xticklabels=self.patient.gaze_angle_keys, yticklabels=self.patient.gaze_angle_keys, ax=ax, cmap=cmap, vmin=norm.vmin, vmax=norm.vmax, cbar_kws={'label': 'Cost'})
+        sns.heatmap(data=costs, annot=weights, mask=mask, xticklabels=self.patient.gaze_angle_keys, yticklabels=self.patient.gaze_angle_keys, ax=ax, cmap=cmap, vmin=norm.vmin, vmax=norm.vmax, cbar_kws={'label': 'Cost'}, fmt="")
+        ax.add_patch(rect)
         return cmap, norm
-
-        
+                
+                
     def calculate_gaze_combos(self, n_steps=10):
-
+        print("Calculating all gaze angle combinations...")
         n = len(self.patient.gaze_angle_keys)
         all_costs= []
         all_weights = []
@@ -174,10 +183,12 @@ class TwoBeam:
             all_costs.append(cost_row)
             all_weights.append(weight_row)
             all_gaze_angle_dvhs.append(dvh_row)
+            print_progress_bar(i+1, n)
         return np.asarray(all_weights), np.asarray(all_costs), np.asarray(all_gaze_angle_dvhs)
 
     def plot_all_gaze_combos(self, n_steps=10):
         weights, costs, dvhs = self.calculate_gaze_combos(n_steps=n_steps)
+        n_angles = len(self.patient.gaze_angle_keys)
 
         fig, axes = plt.subplots(4, 3, figsize=(12,12), constrained_layout=True)
         axes = axes.flatten()
@@ -200,16 +211,16 @@ class TwoBeam:
                         gaze_angle_dvh.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'red', 'zorder': 3, 'alpha': 1, 'label': f'{np.round(opt_w,2)}*{angle_1} + {np.round(1-opt_w, 2)}*{angle_2}'})
                     else:
                         color=cmap(norm(cost))
-                        gaze_angle_dvh.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': color, 'zorder': 1, 'alpha': 0.5})
+                        #gaze_angle_dvh.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': color, 'zorder': 1, 'alpha': 0.01})
 
-            dvhs_1.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '--', 'label': f'{angle_1}', 'zorder': 2, 'lw': 1})
-            dvhs_2.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '-.', 'label': f'{angle_2}', 'zorder': 2, 'lw': 1})
+            dvhs_1.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '--', 'label': f'{angle_1}', 'zorder': 4, 'lw': 1})
+            dvhs_2.roi_dvhs[roi_name].plot(ax=ax, plot_args={'color': 'black', 'ls': '-.', 'label': f'{angle_2}', 'zorder': 4, 'lw': 1})
             ax.set_title(roi_name)
             ax.set_xlabel("Dose (Gy)")
             ax.set_ylabel("Volume (%)")
             ax.grid()
         ax.legend()
-        plt.savefig(f'plots/{self.patient.patient_id}/two_beams/find_optimal_combination.png', dpi=300)
+        plt.savefig(f'plots/{self.patient.patient_id}/two_beams/find_optimal_combination_{n_angles}_angles.png', dpi=300)
         
 
 class RoiDVH:
@@ -287,11 +298,16 @@ class GazeAngleDVHs:
         angle_key,
         dose,
         angle_key_2=None,
+        weight=None,
     ):  
         self.patient = patient
         self.angle_key = angle_key
-        self.angle_key_2 = angle_key_2
         self.is_two_beam = True if self.angle_key_2 is not None else False
+        self.weight = weight
+        if angle_key_2 is not None and weight is not None:
+            self.weight = weight
+            self.angle_key_2 = angle_key_2
+        
         self.roi_dvhs = {}
         for roi_name in patient.roi_names:
             self.roi_dvhs[roi_name] = RoiDVH(patient, roi_name, dose)
@@ -329,7 +345,6 @@ class Patient:
         patient_id, 
         h5py_file_path, 
         num_dvh_bins=1000,
-        two_beams=False,
         weights={'D2_Macula': 3, 'D20_OpticalDisc': 3, 'D20_Cornea': 1, 'V55_Retina':1, 'V27_CiliaryBody': 1, 'D5_Lens': 1},
         ):
         print(f'Initializing Patient {patient_id}...\n', end='\r')
@@ -337,7 +352,6 @@ class Patient:
         self.h5py_file_path = h5py_file_path   
         self.weights = convert_weights(weights)
         self.num_dvh_bins = num_dvh_bins
-        self.two_beams = two_beams
 
         #extract gaze angles, metrics, costs, and dvh data from h5py file
         with h5py.File(self.h5py_file_path, "r") as h5_file:
@@ -368,16 +382,17 @@ class Patient:
     
     def set_weights(self, weights):
         self.weights = convert_weights(weights)
-
-        
-    def initiate_two_beams(self, gaze_angle_keys, weight):
-        self.two_beam = TwoBeam(
-            patient=self,
-            h5py_file_path=self.h5py_file_path,
-            gaze_angle_key_1=gaze_angle_keys[0],
-            gaze_angle_key_2=gaze_angle_keys[1],
-            weight=weight)
     
+
+    def save_all_gaze_combos(self, n_steps=10):
+        gaze_angle_dvhs = []
+        for i, angle_1 in enumerate(self.patient.gaze_angle_keys):
+            for j, angle_2 in enumerate(self.patient.gaze_angle_keys[i:]):
+                self.set_new_gaze_angles((angle_1, angle_2))
+                for w in np.linspace(0, 1, n_steps):
+                    self.set_new_weight(w)
+                    self.update_dvhs()
+                    gaze_angle_dvhs.append(self.dvhs)
 
     def find_gaze_angle_smaller_vdose(self, dose_distribution, roi, dose, max_vol):
         raise NotImplementedError

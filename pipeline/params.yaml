@@ -1,0 +1,13 @@
+#Parameters for different stages of the pipeline
+
+extract:
+  patient_id: "23129"
+  delta_azimuthal: 60
+  h5py_path: "../results/23129/"
+
+
+
+  
+  
+
+

@@ -1,0 +1,13 @@
+stages:
+  extract:
+    cmd: >
+      python ../src/extract_ray_data.py 
+      ${extract.patient_id}
+      ${extract.h5py_path}
+      ${extract.delta_azimuthal}
+      
+    deps:
+      - ../src/extract_ray_data.py
+      - params.yaml
+    outs: 
+      - ${extract.h5py_path}/{extract.patient_id}_delta_{extract.delta_azimuthal}.h5

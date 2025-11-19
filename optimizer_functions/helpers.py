@@ -18,13 +18,6 @@ def define_gaze_angle_grid(
             azimuthals = np.round(np.linspace(0, 360, int(np.ceil(2*np.pi*p/delta_polar))),1)
             for a in azimuthals:
                 angles.append((p, a))
-    #DELETE THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    """angles = [
-        {'Polar': 18.8, 'Azimuthal': 187.8}, 
-        {'Polar': 18.8, 'Azimuthal': 203.5}, 
-        {'Polar': 18.8, 'Azimuthal': 219.1}, 
-        {'Polar': 18.8, 'Azimuthal': 234.8},
-        {'Polar': 18.8, 'Azimuthal': 250.4}]"""
 
     return angles
 

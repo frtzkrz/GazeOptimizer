@@ -1,5 +1,9 @@
 import numpy as np
 
+def filter_gaze_angle_dvhs(dvhs, roi, vol, max_dose):
+    return [dvh for dvh in dvhs if dvhs[roi].get_dose_at_volume(vol) < max_dose]
+
+
 def find_gaze_angle_smaller_dvol(self, roi, vol, max_dose, filtered_gaze_angle_keys=None):
     """
     Find all gaze angles that have D_vol smaller than max_dose Gy for given roi

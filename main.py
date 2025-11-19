@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import time
 
-from functions.optimizer import GazeOptimizer
+from optimizer_functions.optimizer import GazeOptimizer
 
 def main():
 
