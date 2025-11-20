@@ -6,98 +6,9 @@ import h5py
 
 from patient_functions.gaze_angle_dvhs import GazeAngleDVHs
 
-class TwoBeam:
-    def __init__(
-        self,
-        patient,
-        gaze_angle_key_1,
-        gaze_angle_key_2,
-        weight=0.5,
-    ):  
 
-        self.patient = patient.h5py_file_path
-        self.gaze_angle_key_1 = gaze_angle_key_1
-        self.gaze_angle_key_2 = gaze_angle_key_2
-        self.weight = weight
-        with h5py.File(self.h5py_file_path, "r") as h5_file:
-            self.dose_1 = h5_file[self.gaze_angle_key_1][:]
-            self.dose_2 = h5_file[self.gaze_angle_key_2][:]
-        self.combined_dose = self.weight*self.dose_1 + (1-self.weight)*self.dose_2
-        self.dvhs = GazeAngleDVHs(
-            patient=self.patient, 
-            angle_key=self.gaze_angle_key_1,
-            angle_key_2=self.gaze_angle_key_2,
-            dose=self.combined_dose)
-
-    def update_doses(self):
-        with h5py.File(self.h5py_file_path, "r") as h5_file:
-            self.dose_1 = h5_file[self.gaze_angle_key_1][:]
-            self.dose_2 = h5_file[self.gaze_angle_key_2][:]
-        self.combined_dose = self.weight*self.dose_1 + (1-self.weight)*self.dose_2
-
-    def set_new_gaze_angles(self, gaze_angle_keys):
-        self.gaze_angle_key_1 = gaze_angle_keys[0]
-        self.gaze_angle_key_2 = gaze_angle_keys[1]
-        self.update_doses()
-        self.update_dvhs()
-        
-
-    def calculate_dose(self):
-        return self.weight*self.dose_1 + (1-self.weight)*self.dose_2
     
-    def set_new_weight(self, new_weight):
-        self.weight = new_weight
-        self.combined_dose = self.calculate_dose()
-    
-    def update_dvhs(self):
-        self.dvhs = GazeAngleDVHs(
-            patient=self.patient, 
-            angle_key=self.gaze_angle_key_1,
-            angle_key_2=self.gaze_angle_key_2,
-            dose=self.combined_dose,
-            weight=self.weight)
-    
-    def optimize_weight(self):
-        def cost_wrapper(w):
-            self.set_new_weight(w)
-            self.update_dvhs()
-            cost = self.dvhs.calculate_cost()
-            return cost
-        
-        res = minimize_scalar(
-            fun=cost_wrapper,
-            bounds=(0, 1),
-        )
-        return res
-    
-def full_weight_search(patient, gaze_angle_key_1, gaze_angle_key_2, full_output=False, n_steps=10):
-    ws = np.linspace(0, 1, n_steps)
-    costs = []
-    gaze_angle_dvhs = []
-    with h5py.File(patient.h5py_file_path, "r") as h5_file:
-        dose_1 = h5_file[gaze_angle_key_1][:]
-        dose_2 = h5_file[gaze_angle_key_2][:]
-    for w in ws:
-        combined_dose = w*dose_1 + (1-w)*dose_2
-        g = GazeAngleDVHs(
-            patient=patient,
-            angle_key=gaze_angle_key_1,
-            angle_key_2=gaze_angle_key_2,
-            dose=combined_dose,
-            weight=w
-        )
-        cost = g.calculate_cost()
-        gaze_angle_dvhs.append(g)
-        costs.append(cost)
-
-    costs = np.asarray(costs)
-    opt_idx = np.argmin(costs)
-    opt_cost = costs[opt_idx]
-    opt_w = ws[opt_idx]
-    opt_dvh = gaze_angle_dvhs[opt_idx]
-    if full_output: return ws, costs, gaze_angle_dvhs
-    else: 
-        return opt_w, opt_cost, opt_dvh
+"""
 
 def plot_weight_search(patient, gaze_angle_key_1, gaze_angle_key_2, n_steps=10):
     n_plots = len(patient.roi_names)
@@ -166,7 +77,7 @@ def plot_gaze_combo_heatmap(self, costs, weights, ax):
     sns.heatmap(data=costs, annot=weights, mask=mask, xticklabels=self.patient.gaze_angle_keys, yticklabels=self.patient.gaze_angle_keys, ax=ax, cmap=cmap, vmin=norm.vmin, vmax=norm.vmax, cbar_kws={'label': 'Cost'}, fmt="")
     ax.add_patch(rect)
     return cmap, norm
-                
+
                 
 def calculate_gaze_combos(self, n_steps=10):
     print("Calculating all gaze angle combinations...")
@@ -225,4 +136,4 @@ def plot_all_gaze_combos(self, n_steps=10):
         ax.set_ylabel("Volume (%)")
         ax.grid()
     ax.legend()
-    plt.savefig(f'plots/{self.patient.patient_id}/two_beams/find_optimal_combination_{n_angles}_angles.png', dpi=300)
+    plt.savefig(f'plots/{self.patient.patient_id}/two_beams/find_optimal_combination_{n_angles}_angles.png', dpi=300)"""

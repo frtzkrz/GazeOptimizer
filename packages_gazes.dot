@@ -1,0 +1,23 @@
+digraph "packages_gazes" {
+rankdir=BT
+charset="utf-8"
+"GazeOptimizer" [color="black", label=<GazeOptimizer>, shape="box", style="solid"];
+"GazeOptimizer.IDEconnection" [color="black", label=<GazeOptimizer.IDEconnection>, shape="box", style="solid"];
+"GazeOptimizer.dvh_comparison" [color="black", label=<GazeOptimizer.dvh_comparison>, shape="box", style="solid"];
+"GazeOptimizer.filter" [color="black", label=<GazeOptimizer.filter>, shape="box", style="solid"];
+"GazeOptimizer.filter_two_beam" [color="black", label=<GazeOptimizer.filter_two_beam>, shape="box", style="solid"];
+"GazeOptimizer.helpers" [color="black", label=<GazeOptimizer.helpers>, shape="box", style="solid"];
+"GazeOptimizer.main" [color="black", label=<GazeOptimizer.main>, shape="box", style="solid"];
+"GazeOptimizer.patient_functions" [color="black", label=<GazeOptimizer.patient_functions>, shape="box", style="solid"];
+"GazeOptimizer.patient_functions.filter_dvh" [color="black", label=<GazeOptimizer.patient_functions.filter_dvh>, shape="box", style="solid"];
+"GazeOptimizer.patient_functions.helpers" [color="black", label=<GazeOptimizer.patient_functions.helpers>, shape="box", style="solid"];
+"GazeOptimizer.patient_functions.patient" [color="black", label=<GazeOptimizer.patient_functions.patient>, shape="box", style="solid"];
+"GazeOptimizer.patient_functions.plotting" [color="black", label=<GazeOptimizer.patient_functions.plotting>, shape="box", style="solid"];
+"GazeOptimizer.patient_functions.two_beam" [color="black", label=<GazeOptimizer.patient_functions.two_beam>, shape="box", style="solid"];
+"GazeOptimizer.runscriptssss" [color="black", label=<GazeOptimizer.runscriptssss>, shape="box", style="solid"];
+"GazeOptimizer.test_dose_frac" [color="black", label=<GazeOptimizer.test_dose_frac>, shape="box", style="solid"];
+"GazeOptimizer.test_main" [color="black", label=<GazeOptimizer.test_main>, shape="box", style="solid"];
+"GazeOptimizer.dvh_comparison" -> "GazeOptimizer.patient_functions.patient" [arrowhead="open", arrowtail="none"];
+"GazeOptimizer.filter" -> "GazeOptimizer.patient_functions.patient" [arrowhead="open", arrowtail="none"];
+"GazeOptimizer.test_dose_frac" -> "GazeOptimizer.patient_functions" [arrowhead="open", arrowtail="none"];
+}
