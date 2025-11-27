@@ -4,7 +4,6 @@ import matplotlib as mpl
 import seaborn as sns
 import h5py
 
-from patient_functions.gaze_angle_dvhs import GazeAngleDVHs
 
 
     

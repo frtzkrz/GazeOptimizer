@@ -160,7 +160,6 @@ class TreatmentPlan:
         ax.grid()
 
 class DVH:
-
     def __init__(
         self,
         patient,

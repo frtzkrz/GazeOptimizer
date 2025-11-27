@@ -1,4 +1,4 @@
-# Script recorded 18 Nov 2025, 11:59:19
+# Script recorded 26 Nov 2025, 08:44:36
 
 #   RayStation version: 14.0.100.0
 #   Selected patient: ...
@@ -10,7 +10,7 @@ beam_set = get_current("BeamSet")
 
 with CompositeAction('Edit azimuthal gaze angle (GazeOptimizer, beam set: GazeOptimizer)'):
 
-  beam_set.Beams['GazeOptimizer'].GazeAngles.AzimuthalGazeAngle = 50
+  beam_set.Beams['GazeOptimizer'].GazeAngles.AzimuthalGazeAngle = 15
 
   # CompositeAction ends 
 
